@@ -1,0 +1,384 @@
+use std::env;
+use std::fs;
+use std::fs::File;
+use std::io;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::Read;
+use std::path::Path;
+use std::path::PathBuf;
+use std::process::Command;
+use std::process::Stdio;
+use std::rc::Rc;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
+use std::time::Instant;
+use std::time::SystemTime;
+
+use walkdir::WalkDir;
+
+use crate::Config;
+use crate::Language;
+
+/// Find the contest root directory by searching the cwd's parent
+/// dirs. Returns `None` if no root directory was found or the current
+/// directory cannot be fetched.
+pub fn find_root_dir() -> Option<PathBuf> {
+    let mut path = match env::current_dir() {
+        Ok(d) => d,
+        Err(_) => return None,
+    };
+    loop {
+        path.push("Coman.toml");
+        if path.exists() {
+            path.pop();
+            return Some(path);
+        }
+        path.pop();
+        if !path.pop() { return None; }
+    }
+}
+
+/// A struct representing a contest repository. This struct is
+/// immutable. Also note that cloning this struct will simply copy a
+/// reference to the same repository.
+#[derive(Clone)]
+pub struct Repository(Rc<RepoInner>);
+
+struct RepoInner {
+    config: Config,
+    root: PathBuf,
+    src: PathBuf,
+    test: PathBuf,
+    build: PathBuf,
+}
+
+impl Repository {
+    /// Create a new `Repository`.
+    pub fn new<P: Into<PathBuf>>(root: P, config: Config) -> Repository {
+        let root = root.into();
+        let mut src = root.clone();
+        src.push(&config.src_dir);
+        let mut test = root.clone();
+        test.push(&config.test_dir);
+        let mut build = root.clone();
+        build.push(&config.build_dir);
+        Repository(Rc::new(RepoInner {
+            config, root, src, test, build,
+        }))
+    }
+
+    /// Create a new `Repository`, reading the configuration files
+    /// from the 'Coman.toml' file under the specified path.
+    pub fn read<P: Into<PathBuf>>(root: P) -> io::Result<Repository> {
+        let mut root = root.into();
+        root.push("Coman.toml");
+        let config = match File::open(&root) {
+            Ok(mut f) => {
+                let mut s = String::new();
+                f.read_to_string(&mut s).unwrap();
+                toml::from_str::<Config>(&s).unwrap()
+            }
+            Err(ref e) if e.kind() == ErrorKind::NotFound => {
+                Config::default()
+            }
+            Err(e) => return Err(e),
+        };
+        root.pop();
+        Ok(Repository::new(root, config))
+    }
+
+    /// Get the repository's configuration.
+    pub fn config(&self) -> &Config { &self.0.config }
+
+    /// Get the repository's root directory path.
+    pub fn root(&self) -> &Path { &self.0.root }
+
+    /// Get the repository's source directory path.
+    pub fn source_path(&self) -> &Path { &self.0.src }
+
+    /// Get the repository's test directory path.
+    pub fn test_path(&self) -> &Path { &self.0.test }
+
+    /// Get the repository's build directory path.
+    pub fn build_path(&self) -> &Path { &self.0.build }
+
+    /// Get a `Program` from the path to its source code. Returns
+    /// `None` if the path is outside of the source directory or if it
+    /// does not exist.
+    pub fn get_program<P: AsRef<Path>>(&self, path: P) -> Option<Program> {
+        let path = path.as_ref().canonicalize().ok()?;
+        if !path.is_file() { return None; }
+        let path = path.strip_prefix(self.source_path()).ok()?;
+        let mut src = self.source_path().to_path_buf();
+        src.push(&path);
+        let mut test = self.test_path().to_path_buf();
+        test.push(&path);
+        let stem = test.file_stem().unwrap().to_os_string();
+        test.set_file_name(stem);
+        let mut build = self.build_path().to_path_buf();
+        build.push(&path);
+        Some(Program {
+            repo: self.clone(),
+            path: path.to_path_buf(),
+            src, test, build,
+        })
+    }
+
+    /// Get the `Program` that was most recently modified. Returns
+    /// `None` if no program could be found.
+    pub fn find_recent_program(&self) -> Option<Program> {
+        let mut best_time = SystemTime::UNIX_EPOCH;
+        let mut best_prog = None;
+        for ent in WalkDir::new(self.source_path()) {
+            if let Ok(ent) = ent {
+                if ent.file_type().is_file() {
+                    if let Ok(meta) = ent.metadata() {
+                        if let Ok(modified) = meta.modified() {
+                            if modified > best_time {
+                                best_time = modified;
+                                best_prog = Some(ent.into_path());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        self.get_program(best_prog?)
+    }
+}
+
+pub struct Program {
+    repo: Repository,
+    path: PathBuf,
+    src: PathBuf,
+    test: PathBuf,
+    build: PathBuf,
+}
+
+impl Program {
+    /// Get the name of the program.
+    pub fn name(&self) -> &str { self.path.to_str().unwrap() }
+
+    /// Get the path to the program's source file.
+    pub fn source_path(&self) -> &Path { &self.src }
+
+    /// Get the source file's extension. Returns an empty string if
+    /// the file has no extension.
+    pub fn source_extension(&self) -> &str {
+        self.path.extension().and_then(|s| s.to_str()).unwrap_or("")
+    }
+
+    /// Get the path to the program's test directory.
+    pub fn test_path(&self) -> &Path { &self.test }
+
+    /// Get the path to the program's build location.
+    pub fn build_path(&self) -> &Path { &self.build }
+
+    /// Get the language that this program is written in.
+    pub fn language(&self) -> Option<&Language> {
+        self.repo.config().languages.get(self.source_extension())
+    }
+
+    fn command_from_template(&self, temp: &[String]) -> Command {
+        let mut c = Command::new(&temp[0]);
+        for arg in &temp[1..] {
+            match arg.as_str() {
+                "{source}" => c.arg(self.source_path()),
+                "{build}" => c.arg(self.build_path()),
+                "{root}" => c.arg(self.repo.root()),
+                a => c.arg(a),
+            };
+        }
+        c
+    }
+
+    /// Compile the program.
+    pub fn recompile(&self) -> io::Result<bool> {
+        let src = self.source_path();
+        let dst = self.build_path();
+        let ext = self.source_extension();
+        if let Some(lang) = self.language() {
+            let cmd = &lang.compile;
+            // Create destination parent directories
+            fs::create_dir_all(dst.parent().unwrap())?;
+            if cmd.is_empty() {
+                // Copy src -> dst
+                fs::copy(src, dst)?;
+                // Set executable
+                // let mut perm = fs::metadata(dst)?.permissions();
+                // perm.set_mode(perm.mode() | 0o111);
+                // fs::set_permissions(dst, perm)?;
+                Ok(true)
+            } else {
+                // Run compilation command
+                let stat = self.command_from_template(cmd).status()?;
+                Ok(stat.success())
+            }
+        } else {
+            Err(Error::new(ErrorKind::InvalidInput,
+                           format!("unknown file extension '{}'", ext)))
+        }
+    }
+
+    /// Check if the source file needs a recompile, e.g. due to
+    /// modification.
+    pub fn dirty(&self) -> bool {
+        fn _dirty(dst: &Path, src: &Path) -> io::Result<bool> {
+            let dst_time = dst.metadata()?.modified()?;
+            let src_time = src.metadata()?.modified()?;
+            Ok(dst_time < src_time)
+        }
+        match _dirty(self.build_path(), self.source_path()) {
+            Ok(v) => v,
+            Err(_) => true,
+        }
+    }
+
+    /// Compile the program if it has not already been compiled. If it
+    /// does not need to be compiled, no action is performed and
+    /// `Ok(true)` is returned.
+    pub fn compile(&self) -> io::Result<bool> {
+        if self.dirty() {
+            self.recompile()
+        } else {
+            Ok(true)
+        }
+    }
+
+    /// Get a list of the test cases. If the list of test cases cannot
+    /// be accessed, then an empty vector is returned. Otherwise,
+    /// returns a vector of the test case IDs.
+    pub fn test_cases(&self) -> Vec<String> {
+        fn _test_cases(dir: &Path) -> io::Result<Vec<String>> {
+            let mut v = vec![];
+            let read = fs::read_dir(dir)?;
+            for ent in read {
+                let ent: std::fs::DirEntry = ent?;
+                if let Ok(mut s) = ent.file_name().into_string() {
+                    if s.ends_with(".in") {
+                        s.truncate(s.len() - ".in".len());
+                        v.push(s);
+                    }
+                }
+            }
+            Ok(v)
+        }
+        match _test_cases(self.test_path()) {
+            Ok(v) => v,
+            Err(_) => vec![],
+        }
+    }
+
+    /// Create a `Command` that can be used to run the
+    /// program. Assumes that the program has already been compiled.
+    pub fn run_command(&self) -> Command {
+        if let Some(lang) = self.language() {
+            let run = &lang.run;
+            if !run.is_empty() {
+                return self.command_from_template(run);
+            }
+        }
+        Command::new(self.build_path())
+    }
+
+    /// Create a `Command` that can be used to run the program in a
+    /// debugger specified in the configuration. Assumes that the
+    /// program has already been compiled.
+    pub fn debug_command(&self) -> io::Result<Command> {
+        let ext = self.source_extension();
+        if let Some(lang) = self.language() {
+            let debug = &lang.debug;
+            if !debug.is_empty() {
+                return Ok(self.command_from_template(debug));
+            }
+        }
+        Err(Error::new(ErrorKind::InvalidInput,
+                       format!("no debugger specified for file extension '{}'", ext)))
+    }
+
+    /// Run the program. Returns true if the program exited with
+    /// success, otherwise returns false. Assumes that the program has
+    /// already been compiled. The program's stdin, stdout, and stderr
+    /// are all inherited.
+    pub fn run(&self) -> io::Result<bool> {
+        let mut cmd = self.run_command();
+        let stat = cmd.status()?;
+        Ok(stat.success())
+    }
+
+    /// Test the program. Assumes that the program has already been
+    /// compiled. The program's output is compared to the expected
+    /// output, and its error stream is discarded.
+    pub fn test(&self, id: &str) -> io::Result<TestResult> {
+        let mut cmd = self.run_command();
+        let mut in_path = self.test_path().to_path_buf();
+        in_path.push(format!("{}.in", id));
+        let mut out_path = self.test_path().to_path_buf();
+        out_path.push(format!("{}.out", id));
+        let in_file = File::open(&in_path)?;
+        let mut out_file = File::open(&out_path)?;
+        cmd.stdin(in_file);
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::null());
+        let begin = Instant::now();
+        let mut child = cmd.spawn()?;
+        let mut stdout = child.stdout.take().unwrap();
+        let (send, recv) = mpsc::channel();
+        thread::spawn(move || {
+            let mut act_output = vec![];
+            let _ = stdout.read_to_end(&mut act_output);
+            let _ = send.send(act_output);
+        });
+        let result = recv.recv_timeout(Duration::from_millis(self.repo.config().timeout));
+        let end = Instant::now();
+        let dur = end - begin;
+        let status = match result {
+            Ok(act_output) => {
+                // Program exited in time
+                let mut exp_output = vec![];
+                out_file.read_to_end(&mut exp_output)?;
+                if !child.wait()?.success() {
+                    TestStatus::Crash
+                } else if act_output == exp_output {
+                    TestStatus::Pass
+                } else {
+                    TestStatus::Wrong
+                }
+            }
+            Err(_) => {
+                // Program did not exit in time
+                child.kill()?;
+                TestStatus::Timeout
+            }
+        };
+        Ok(TestResult {
+            status, time: dur
+        })
+    }
+
+    /// Debug the program. The specified debugging program in the
+    /// configuration is called. This usually means that the user is
+    /// put into an interactive debugger like GDB. Returns true if the
+    /// debugger exited with success, or false otherwise. This method
+    /// assumes that the program has already been compiled.
+    pub fn debug(&self) -> io::Result<bool> {
+        let mut cmd = self.debug_command()?;
+        let stat = cmd.status()?;
+        Ok(stat.success())
+    }
+}
+
+/// Result of a program test.
+#[derive(Clone, Debug)]
+pub struct TestResult {
+    pub status: TestStatus,
+    pub time: Duration,
+}
+
+/// Result type of the test.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TestStatus {
+    Pass, Wrong, Crash, Timeout,
+}
