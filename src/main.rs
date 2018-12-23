@@ -73,7 +73,7 @@ fn parse_args() -> Arguments {
     };
 
     let debug_build = matches.is_present("debug-build");
-    let test = matches.value_of("test").map(str::to_string);
+    let test = matches.value_of("test-name").map(str::to_string);
     let program = matches.value_of("PROGRAM").map(str::to_string);
 
     Arguments { action, debug_build, test, program }
@@ -99,6 +99,44 @@ macro_rules! stepln {
         eprintln!("\x1b[1m{:>8}\x1b[m", $name );
     }};
     ($name:expr ,) => { step!($name) };
+}
+
+fn do_test(prgm: &Program, case: &str) -> bool {
+    step!("TEST", "{}: ", case);
+    let result = prgm.test(case);
+    match result {
+        Ok(result) => {
+            match result.status {
+                TestStatus::Pass => eprint!("\x1b[1;32mok\x1b[m "),
+                TestStatus::Wrong => eprint!("\x1b[1;31mwrong\x1b[m "),
+                TestStatus::Crash => eprint!("\x1b[1;31mcrash\x1b[m "),
+                TestStatus::Timeout => eprint!("\x1b[1;33mtimeout\x1b[m "),
+            }
+            let seconds = result.time.as_secs();
+            let millis = result.time.subsec_millis();
+            let micros = result.time.subsec_micros() % 1000;
+            if seconds >= 100 {
+                eprintln!("{} s", seconds);
+            } else if seconds >= 10 {
+                eprintln!("{}.{} s", seconds, millis / 100);
+            } else if seconds >= 1 {
+                eprintln!("{}.{:02} s", seconds, millis / 10);
+            } else if millis >= 100 {
+                eprintln!("{} ms", millis);
+            } else if millis >= 10 {
+                eprintln!("{}.{} ms", millis, micros / 100);
+            } else if millis >= 1 {
+                eprintln!("{}.{:02} ms", millis, micros / 10);
+            } else {
+                eprintln!("0.{:03} ms", micros);
+            }
+            result.status == TestStatus::Pass
+        }
+        Err(e) => {
+            eprintln!("{}", e);
+            false
+        }
+    }
 }
 
 fn main() {
@@ -145,44 +183,15 @@ fn main() {
 
     match args.action {
         Action::Test => {
-            let mut cases = program.test_cases();
-            cases.sort_unstable();
             let mut all_ok = true;
-            for case in &cases {
-                step!("TEST", "{}: ", case);
-                let result = program.test(case);
-                match result {
-                    Ok(result) => {
-                        match result.status {
-                            TestStatus::Pass => eprint!("\x1b[1;32mok\x1b[m "),
-                            TestStatus::Wrong => eprint!("\x1b[1;31mwrong\x1b[m "),
-                            TestStatus::Crash => eprint!("\x1b[1;31mcrash\x1b[m "),
-                            TestStatus::Timeout => eprint!("\x1b[1;33mtimeout\x1b[m "),
-                        }
-                        if result.status != TestStatus::Pass { all_ok = false; }
-                        let seconds = result.time.as_secs();
-                        let millis = result.time.subsec_millis();
-                        let micros = result.time.subsec_micros() % 1000;
-                        if seconds >= 100 {
-                            eprintln!("{} s", seconds);
-                        } else if seconds >= 10 {
-                            eprintln!("{}.{} s", seconds, millis / 100);
-                        } else if seconds >= 1 {
-                            eprintln!("{}.{:02} s", seconds, millis / 10);
-                        } else if millis >= 100 {
-                            eprintln!("{} ms", millis);
-                        } else if millis >= 10 {
-                            eprintln!("{}.{} ms", millis, micros / 100);
-                        } else if millis >= 1 {
-                            eprintln!("{}.{:02} ms", millis, micros / 10);
-                        } else {
-                            eprintln!("0.{:03} ms", micros);
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("{}", e);
-                        all_ok = false;
-                    }
+            if let Some(ref case) = args.test {
+                all_ok = do_test(&program, case);
+            } else {
+                // Testing all cases
+                let mut cases = program.test_cases();
+                cases.sort_unstable();
+                for case in &cases {
+                    all_ok = do_test(&program, case) && all_ok;
                 }
             }
             if !all_ok {
