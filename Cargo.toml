@@ -1,0 +1,12 @@
+[package]
+name = "coman"
+version = "0.1.0"
+authors = ["Jasmine Tai <jtai@jtai.ca>"]
+edition = "2018"
+
+[dependencies]
+clap = "2.32.0"
+serde = "1.0.82"
+serde_derive = "1.0.82"
+toml = "0.4.10"
+walkdir = "2.2.7"
