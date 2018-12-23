@@ -28,6 +28,7 @@ impl Default for Config {
 #[serde(default)]
 pub struct Language {
     pub compile: Vec<String>,
+    pub compile_debug: Vec<String>,
     pub run: Vec<String>,
     pub debug: Vec<String>,
 }

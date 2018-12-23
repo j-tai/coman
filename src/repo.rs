@@ -52,6 +52,8 @@ struct RepoInner {
     src: PathBuf,
     test: PathBuf,
     build: PathBuf,
+    build_release: PathBuf,
+    build_debug: PathBuf,
 }
 
 impl Repository {
@@ -64,8 +66,12 @@ impl Repository {
         test.push(&config.test_dir);
         let mut build = root.clone();
         build.push(&config.build_dir);
+        let mut build_release = build.clone();
+        build_release.push("release");
+        let mut build_debug = build.clone();
+        build_debug.push("debug");
         Repository(Rc::new(RepoInner {
-            config, root, src, test, build,
+            config, root, src, test, build, build_release, build_debug
         }))
     }
 
@@ -104,6 +110,12 @@ impl Repository {
     /// Get the repository's build directory path.
     pub fn build_path(&self) -> &Path { &self.0.build }
 
+    /// Get the repository's release build directory path.
+    pub fn build_release_path(&self) -> &Path { &self.0.build_release }
+
+    /// Get the repository's debug build directory path.
+    pub fn build_debug_path(&self) -> &Path { &self.0.build_debug }
+
     /// Get a `Program` from the path to its source code. Returns
     /// `None` if the path is outside of the source directory or if it
     /// does not exist.
@@ -117,12 +129,14 @@ impl Repository {
         test.push(&path);
         let stem = test.file_stem().unwrap().to_os_string();
         test.set_file_name(stem);
-        let mut build = self.build_path().to_path_buf();
-        build.push(&path);
+        let mut build_release = self.build_release_path().to_path_buf();
+        build_release.push(&path);
+        let mut build_debug = self.build_debug_path().to_path_buf();
+        build_debug.push(&path);
         Some(Program {
             repo: self.clone(),
             path: path.to_path_buf(),
-            src, test, build,
+            src, test, build_release, build_debug
         })
     }
 
@@ -154,7 +168,8 @@ pub struct Program {
     path: PathBuf,
     src: PathBuf,
     test: PathBuf,
-    build: PathBuf,
+    build_release: PathBuf,
+    build_debug: PathBuf,
 }
 
 impl Program {
@@ -173,20 +188,28 @@ impl Program {
     /// Get the path to the program's test directory.
     pub fn test_path(&self) -> &Path { &self.test }
 
+    /// Get the path to the program's release build location.
+    pub fn build_release_path(&self) -> &Path { &self.build_release }
+
+    /// Get the path to the program's debug build location.
+    pub fn build_debug_path(&self) -> &Path { &self.build_debug }
+
     /// Get the path to the program's build location.
-    pub fn build_path(&self) -> &Path { &self.build }
+    pub fn build_path(&self, debug: bool) -> &Path {
+        if debug { self.build_debug_path() } else { self.build_release_path() }
+    }
 
     /// Get the language that this program is written in.
     pub fn language(&self) -> Option<&Language> {
         self.repo.config().languages.get(self.source_extension())
     }
 
-    fn command_from_template(&self, temp: &[String]) -> Command {
+    fn command_from_template(&self, temp: &[String], debug: bool) -> Command {
         let mut c = Command::new(&temp[0]);
         for arg in &temp[1..] {
             match arg.as_str() {
                 "{source}" => c.arg(self.source_path()),
-                "{build}" => c.arg(self.build_path()),
+                "{build}" => c.arg(self.build_path(debug)),
                 "{root}" => c.arg(self.repo.root()),
                 a => c.arg(a),
             };
@@ -195,12 +218,12 @@ impl Program {
     }
 
     /// Compile the program.
-    pub fn recompile(&self) -> io::Result<bool> {
+    pub fn recompile(&self, debug: bool) -> io::Result<bool> {
         let src = self.source_path();
-        let dst = self.build_path();
+        let dst = self.build_path(debug);
         let ext = self.source_extension();
         if let Some(lang) = self.language() {
-            let cmd = &lang.compile;
+            let cmd = if debug { &lang.compile_debug } else { &lang.compile };
             // Create destination parent directories
             fs::create_dir_all(dst.parent().unwrap())?;
             if cmd.is_empty() {
@@ -213,7 +236,7 @@ impl Program {
                 Ok(true)
             } else {
                 // Run compilation command
-                let stat = self.command_from_template(cmd).status()?;
+                let stat = self.command_from_template(cmd, debug).status()?;
                 Ok(stat.success())
             }
         } else {
@@ -224,13 +247,13 @@ impl Program {
 
     /// Check if the source file needs a recompile, e.g. due to
     /// modification.
-    pub fn dirty(&self) -> bool {
+    pub fn dirty(&self, debug: bool) -> bool {
         fn _dirty(dst: &Path, src: &Path) -> io::Result<bool> {
             let dst_time = dst.metadata()?.modified()?;
             let src_time = src.metadata()?.modified()?;
             Ok(dst_time < src_time)
         }
-        match _dirty(self.build_path(), self.source_path()) {
+        match _dirty(self.build_path(debug), self.source_path()) {
             Ok(v) => v,
             Err(_) => true,
         }
@@ -239,9 +262,9 @@ impl Program {
     /// Compile the program if it has not already been compiled. If it
     /// does not need to be compiled, no action is performed and
     /// `Ok(true)` is returned.
-    pub fn compile(&self) -> io::Result<bool> {
-        if self.dirty() {
-            self.recompile()
+    pub fn compile(&self, debug: bool) -> io::Result<bool> {
+        if self.dirty(debug) {
+            self.recompile(debug)
         } else {
             Ok(true)
         }
@@ -277,10 +300,10 @@ impl Program {
         if let Some(lang) = self.language() {
             let run = &lang.run;
             if !run.is_empty() {
-                return self.command_from_template(run);
+                return self.command_from_template(run, false);
             }
         }
-        Command::new(self.build_path())
+        Command::new(self.build_path(false))
     }
 
     /// Create a `Command` that can be used to run the program in a
@@ -291,26 +314,24 @@ impl Program {
         if let Some(lang) = self.language() {
             let debug = &lang.debug;
             if !debug.is_empty() {
-                return Ok(self.command_from_template(debug));
+                return Ok(self.command_from_template(debug, true));
             }
         }
         Err(Error::new(ErrorKind::InvalidInput,
                        format!("no debugger specified for file extension '{}'", ext)))
     }
 
-    /// Run the program. Returns true if the program exited with
-    /// success, otherwise returns false. Assumes that the program has
-    /// already been compiled. The program's stdin, stdout, and stderr
-    /// are all inherited.
+    /// Run the program in release mode. Returns true if the program
+    /// exited with success, otherwise returns false. The program's
+    /// stdin, stdout, and stderr are all inherited.
     pub fn run(&self) -> io::Result<bool> {
         let mut cmd = self.run_command();
         let stat = cmd.status()?;
         Ok(stat.success())
     }
 
-    /// Test the program. Assumes that the program has already been
-    /// compiled. The program's output is compared to the expected
-    /// output, and its error stream is discarded.
+    /// Compile and test the program. The program's output is compared
+    /// to the expected output, and its error stream is discarded.
     pub fn test(&self, id: &str) -> io::Result<TestResult> {
         let mut cmd = self.run_command();
         let mut in_path = self.test_path().to_path_buf();
@@ -358,11 +379,10 @@ impl Program {
         })
     }
 
-    /// Debug the program. The specified debugging program in the
-    /// configuration is called. This usually means that the user is
-    /// put into an interactive debugger like GDB. Returns true if the
-    /// debugger exited with success, or false otherwise. This method
-    /// assumes that the program has already been compiled.
+    /// Compile and debug the program. The specified debugging program
+    /// in the configuration is called. This usually means that the
+    /// user is put into an interactive debugger like GDB. Returns
+    /// true if the debugger exited with success, or false otherwise.
     pub fn debug(&self) -> io::Result<bool> {
         let mut cmd = self.debug_command()?;
         let stat = cmd.status()?;

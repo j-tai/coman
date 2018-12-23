@@ -44,10 +44,6 @@ fn parse_args() -> Arguments {
              .long("debug")
              .help("Debug the solution (implies -d)"))
 
-        .arg(Arg::with_name("debug-build")
-             .short("d")
-             .long("debug-build")
-             .help("Build without optimizations"))
         .arg(Arg::with_name("test-name")
              .short("t")
              .long("test-name")
@@ -138,7 +134,7 @@ fn main() {
 
     // Compiling the program
     stepln!("COMPILE", "{}", program.name());
-    match program.compile() {
+    match program.compile(args.action == Action::Debug) {
         Ok(true) => (),
         Ok(false) => process::exit(2),
         Err(e) => {
