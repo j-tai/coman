@@ -352,20 +352,22 @@ impl Program {
             let _ = stdout.read_to_end(&mut act_output);
             let _ = send.send(act_output);
         });
-        let result = recv.recv_timeout(Duration::from_millis(self.repo.config().timeout));
+        let result = recv.recv_timeout(Duration::from_millis(self.repo.config().hard_timeout));
         let end = Instant::now();
         let dur = end - begin;
         let status = match result {
             Ok(act_output) => {
-                // Program exited in time
+                // Program exited before the hard timeout
                 let mut exp_output = vec![];
                 out_file.read_to_end(&mut exp_output)?;
+                let timed_out = (dur.as_secs() * 1000 + u64::from(dur.subsec_millis()))
+                    >= self.repo.config().soft_timeout;
                 if !child.wait()?.success() {
-                    TestStatus::Crash
+                    if timed_out { TestStatus::CrashTimeout } else { TestStatus::Crash }
                 } else if act_output == exp_output {
-                    TestStatus::Pass
+                    if timed_out { TestStatus::PassTimeout } else { TestStatus::Pass }
                 } else {
-                    TestStatus::Wrong
+                    if timed_out { TestStatus::WrongTimeout } else { TestStatus::Wrong }
                 }
             }
             Err(_) => {
@@ -401,4 +403,5 @@ pub struct TestResult {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TestStatus {
     Pass, Wrong, Crash, Timeout,
+    PassTimeout, WrongTimeout, CrashTimeout
 }
