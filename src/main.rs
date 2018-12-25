@@ -107,11 +107,11 @@ fn do_test(prgm: &Program, case: &str) -> bool {
     match result {
         Ok(result) => {
             match result.status {
-                TestStatus::Pass => eprint!("\x1b[1;32mok\x1b[m "),
+                TestStatus::Pass => eprint!("\x1b[1;32mpass\x1b[m "),
                 TestStatus::Wrong => eprint!("\x1b[1;31mwrong\x1b[m "),
                 TestStatus::Crash => eprint!("\x1b[1;31mcrash\x1b[m "),
                 TestStatus::Timeout => eprint!("\x1b[1;33mtimeout\x1b[m "),
-                TestStatus::PassTimeout => eprint!("\x1b[1;32mok\x1b[m-\x1b[1;33mtimeout\x1b[m "),
+                TestStatus::PassTimeout => eprint!("\x1b[1;32mpass\x1b[m-\x1b[1;33mtimeout\x1b[m "),
                 TestStatus::WrongTimeout => eprint!("\x1b[1;31mwrong\x1b[m-\x1b[1;33mtimeout\x1b[m "),
                 TestStatus::CrashTimeout => eprint!("\x1b[1;31mcrash\x1b[m-\x1b[1;33mtimeout\x1b[m "),
             }
