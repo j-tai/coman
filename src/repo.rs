@@ -36,7 +36,9 @@ pub fn find_root_dir() -> Option<PathBuf> {
             return Some(path);
         }
         path.pop();
-        if !path.pop() { return None; }
+        if !path.pop() {
+            return None;
+        }
     }
 }
 
@@ -71,7 +73,13 @@ impl Repository {
         let mut build_debug = build.clone();
         build_debug.push("debug");
         Repository(Rc::new(RepoInner {
-            config, root, src, test, build, build_release, build_debug
+            config,
+            root,
+            src,
+            test,
+            build,
+            build_release,
+            build_debug,
         }))
     }
 
@@ -86,9 +94,7 @@ impl Repository {
                 f.read_to_string(&mut s).unwrap();
                 toml::from_str::<Config>(&s).unwrap()
             }
-            Err(ref e) if e.kind() == ErrorKind::NotFound => {
-                Config::default()
-            }
+            Err(ref e) if e.kind() == ErrorKind::NotFound => Config::default(),
             Err(e) => return Err(e),
         };
         root.pop();
@@ -96,32 +102,48 @@ impl Repository {
     }
 
     /// Get the repository's configuration.
-    pub fn config(&self) -> &Config { &self.0.config }
+    pub fn config(&self) -> &Config {
+        &self.0.config
+    }
 
     /// Get the repository's root directory path.
-    pub fn root(&self) -> &Path { &self.0.root }
+    pub fn root(&self) -> &Path {
+        &self.0.root
+    }
 
     /// Get the repository's source directory path.
-    pub fn source_path(&self) -> &Path { &self.0.src }
+    pub fn source_path(&self) -> &Path {
+        &self.0.src
+    }
 
     /// Get the repository's test directory path.
-    pub fn test_path(&self) -> &Path { &self.0.test }
+    pub fn test_path(&self) -> &Path {
+        &self.0.test
+    }
 
     /// Get the repository's build directory path.
-    pub fn build_path(&self) -> &Path { &self.0.build }
+    pub fn build_path(&self) -> &Path {
+        &self.0.build
+    }
 
     /// Get the repository's release build directory path.
-    pub fn build_release_path(&self) -> &Path { &self.0.build_release }
+    pub fn build_release_path(&self) -> &Path {
+        &self.0.build_release
+    }
 
     /// Get the repository's debug build directory path.
-    pub fn build_debug_path(&self) -> &Path { &self.0.build_debug }
+    pub fn build_debug_path(&self) -> &Path {
+        &self.0.build_debug
+    }
 
     /// Get a `Program` from the path to its source code. Returns
     /// `None` if the path is outside of the source directory or if it
     /// does not exist.
     pub fn get_program<P: AsRef<Path>>(&self, path: P) -> Option<Program> {
         let path = path.as_ref().canonicalize().ok()?;
-        if !path.is_file() { return None; }
+        if !path.is_file() {
+            return None;
+        }
         let path = path.strip_prefix(self.source_path()).ok()?;
         let mut src = self.source_path().to_path_buf();
         src.push(&path);
@@ -136,7 +158,10 @@ impl Repository {
         Some(Program {
             repo: self.clone(),
             path: path.to_path_buf(),
-            src, test, build_release, build_debug
+            src,
+            test,
+            build_release,
+            build_debug,
         })
     }
 
@@ -174,10 +199,14 @@ pub struct Program {
 
 impl Program {
     /// Get the name of the program.
-    pub fn name(&self) -> &str { self.path.to_str().unwrap() }
+    pub fn name(&self) -> &str {
+        self.path.to_str().unwrap()
+    }
 
     /// Get the path to the program's source file.
-    pub fn source_path(&self) -> &Path { &self.src }
+    pub fn source_path(&self) -> &Path {
+        &self.src
+    }
 
     /// Get the source file's extension. Returns an empty string if
     /// the file has no extension.
@@ -186,17 +215,27 @@ impl Program {
     }
 
     /// Get the path to the program's test directory.
-    pub fn test_path(&self) -> &Path { &self.test }
+    pub fn test_path(&self) -> &Path {
+        &self.test
+    }
 
     /// Get the path to the program's release build location.
-    pub fn build_release_path(&self) -> &Path { &self.build_release }
+    pub fn build_release_path(&self) -> &Path {
+        &self.build_release
+    }
 
     /// Get the path to the program's debug build location.
-    pub fn build_debug_path(&self) -> &Path { &self.build_debug }
+    pub fn build_debug_path(&self) -> &Path {
+        &self.build_debug
+    }
 
     /// Get the path to the program's build location.
     pub fn build_path(&self, debug: bool) -> &Path {
-        if debug { self.build_debug_path() } else { self.build_release_path() }
+        if debug {
+            self.build_debug_path()
+        } else {
+            self.build_release_path()
+        }
     }
 
     /// Get the language that this program is written in.
@@ -223,7 +262,11 @@ impl Program {
         let dst = self.build_path(debug);
         let ext = self.source_extension();
         if let Some(lang) = self.language() {
-            let cmd = if debug { &lang.compile_debug } else { &lang.compile };
+            let cmd = if debug {
+                &lang.compile_debug
+            } else {
+                &lang.compile
+            };
             // Create destination parent directories
             fs::create_dir_all(dst.parent().unwrap())?;
             if cmd.is_empty() {
@@ -240,8 +283,10 @@ impl Program {
                 Ok(stat.success())
             }
         } else {
-            Err(Error::new(ErrorKind::InvalidInput,
-                           format!("unknown file extension '{}'", ext)))
+            Err(Error::new(
+                ErrorKind::InvalidInput,
+                format!("unknown file extension '{}'", ext),
+            ))
         }
     }
 
@@ -317,8 +362,10 @@ impl Program {
                 return Ok(self.command_from_template(debug, true));
             }
         }
-        Err(Error::new(ErrorKind::InvalidInput,
-                       format!("no debugger specified for file extension '{}'", ext)))
+        Err(Error::new(
+            ErrorKind::InvalidInput,
+            format!("no debugger specified for file extension '{}'", ext),
+        ))
     }
 
     /// Run the program in release mode. Returns true if the program
@@ -363,11 +410,23 @@ impl Program {
                 let timed_out = (dur.as_secs() * 1000 + u64::from(dur.subsec_millis()))
                     >= self.repo.config().soft_timeout;
                 if !child.wait()?.success() {
-                    if timed_out { TestStatus::CrashTimeout } else { TestStatus::Crash }
+                    if timed_out {
+                        TestStatus::CrashTimeout
+                    } else {
+                        TestStatus::Crash
+                    }
                 } else if act_output == exp_output {
-                    if timed_out { TestStatus::PassTimeout } else { TestStatus::Pass }
+                    if timed_out {
+                        TestStatus::PassTimeout
+                    } else {
+                        TestStatus::Pass
+                    }
                 } else {
-                    if timed_out { TestStatus::WrongTimeout } else { TestStatus::Wrong }
+                    if timed_out {
+                        TestStatus::WrongTimeout
+                    } else {
+                        TestStatus::Wrong
+                    }
                 }
             }
             Err(_) => {
@@ -376,9 +435,7 @@ impl Program {
                 TestStatus::Timeout
             }
         };
-        Ok(TestResult {
-            status, time: dur
-        })
+        Ok(TestResult { status, time: dur })
     }
 
     /// Compile and debug the program. The specified debugging program
@@ -402,6 +459,11 @@ pub struct TestResult {
 /// Result type of the test.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TestStatus {
-    Pass, Wrong, Crash, Timeout,
-    PassTimeout, WrongTimeout, CrashTimeout
+    Pass,
+    Wrong,
+    Crash,
+    Timeout,
+    PassTimeout,
+    WrongTimeout,
+    CrashTimeout,
 }
