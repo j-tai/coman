@@ -5,8 +5,7 @@ authors = ["Jasmine Tai <jtai@jtai.ca>"]
 edition = "2018"
 
 [dependencies]
-clap = "2.32.0"
-serde = "1.0.82"
-serde_derive = "1.0.82"
-toml = "0.4.10"
+clap = "2.33.0"
+serde = { version = "1.0.90", features = ["derive"] }
+toml = "0.5.0"
 walkdir = "2.2.7"
