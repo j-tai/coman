@@ -19,41 +19,53 @@ struct Arguments {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum Action {
-    Build, Run, Test, Debug
+    Build,
+    Run,
+    Test,
+    Debug,
 }
 
 fn parse_args() -> Arguments {
     let matches = App::new("coman")
         .version(env!("CARGO_PKG_VERSION"))
         .about("Contest manager")
-
-        .arg(Arg::with_name("build")
-             .short("B")
-             .long("build")
-             .help("Build the solution"))
-        .arg(Arg::with_name("run")
-             .short("R")
-             .long("run")
-             .help("Run the solution (default)"))
-        .arg(Arg::with_name("test")
-             .short("T")
-             .long("test")
-             .help("Test the solution"))
-        .arg(Arg::with_name("debug")
-             .short("D")
-             .long("debug")
-             .help("Debug the solution (implies -d)"))
-
-        .arg(Arg::with_name("test-name")
-             .short("t")
-             .long("test-name")
-             .takes_value(true)
-             .value_name("TEST")
-             .help("Name of test to run"))
-
-        .arg(Arg::with_name("PROGRAM")
-             .index(1)
-             .help("Path to solution source file"))
+        .arg(
+            Arg::with_name("build")
+                .short("B")
+                .long("build")
+                .help("Build the solution"),
+        )
+        .arg(
+            Arg::with_name("run")
+                .short("R")
+                .long("run")
+                .help("Run the solution (default)"),
+        )
+        .arg(
+            Arg::with_name("test")
+                .short("T")
+                .long("test")
+                .help("Test the solution"),
+        )
+        .arg(
+            Arg::with_name("debug")
+                .short("D")
+                .long("debug")
+                .help("Debug the solution (implies -d)"),
+        )
+        .arg(
+            Arg::with_name("test-name")
+                .short("t")
+                .long("test-name")
+                .takes_value(true)
+                .value_name("TEST")
+                .help("Name of test to run"),
+        )
+        .arg(
+            Arg::with_name("PROGRAM")
+                .index(1)
+                .help("Path to solution source file"),
+        )
         .get_matches();
 
     let build = matches.is_present("build");
@@ -76,7 +88,12 @@ fn parse_args() -> Arguments {
     let test = matches.value_of("test-name").map(str::to_string);
     let program = matches.value_of("PROGRAM").map(str::to_string);
 
-    Arguments { action, debug_build, test, program }
+    Arguments {
+        action,
+        debug_build,
+        test,
+        program,
+    }
 }
 
 macro_rules! step {
@@ -112,8 +129,12 @@ fn do_test(prgm: &Program, case: &str) -> bool {
                 TestStatus::Crash => eprint!("\x1b[1;31mcrash\x1b[m "),
                 TestStatus::Timeout => eprint!("\x1b[1;33mtimeout\x1b[m "),
                 TestStatus::PassTimeout => eprint!("\x1b[1;32mpass\x1b[m-\x1b[1;33mtimeout\x1b[m "),
-                TestStatus::WrongTimeout => eprint!("\x1b[1;31mwrong\x1b[m-\x1b[1;33mtimeout\x1b[m "),
-                TestStatus::CrashTimeout => eprint!("\x1b[1;31mcrash\x1b[m-\x1b[1;33mtimeout\x1b[m "),
+                TestStatus::WrongTimeout => {
+                    eprint!("\x1b[1;31mwrong\x1b[m-\x1b[1;33mtimeout\x1b[m ")
+                }
+                TestStatus::CrashTimeout => {
+                    eprint!("\x1b[1;31mcrash\x1b[m-\x1b[1;33mtimeout\x1b[m ")
+                }
             }
             let seconds = result.time.as_secs();
             let millis = result.time.subsec_millis();
@@ -211,7 +232,7 @@ fn main() {
                     eprintln!("coman: running program failed: {}", e);
                     process::exit(2);
                 }
-            }            
+            }
         }
 
         Action::Debug => {
