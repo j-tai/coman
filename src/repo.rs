@@ -5,6 +5,7 @@ use std::io;
 use std::io::Error;
 use std::io::ErrorKind;
 use std::io::Read;
+use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
@@ -12,6 +13,7 @@ use std::process::Stdio;
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::thread;
+use std::thread::JoinHandle;
 use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
@@ -414,17 +416,22 @@ impl Program {
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::null());
+        let mut input = vec![];
+        in_file.read_to_end(&mut input)?;
+
         let begin = Instant::now();
         let mut child = cmd.spawn()?;
-        // This thread copies the input data to the process's stdin.
         let mut stdin = child.stdin.take().unwrap();
-        let in_thread = thread::spawn(move || io::copy(&mut in_file, &mut stdin));
+        // This thread copies the input data to the process's stdin.
+        let in_thread = thread::spawn(move || stdin.write_all(&input));
         let mut stdout = child.stdout.take().unwrap();
         let (send, recv) = mpsc::channel();
-        let out_thread = thread::spawn(move || {
+        // This thread reads the output from the child process.
+        let out_thread: JoinHandle<io::Result<()>> = thread::spawn(move || {
             let mut act_output = vec![];
-            let _ = stdout.read_to_end(&mut act_output);
-            let _ = send.send(act_output);
+            stdout.read_to_end(&mut act_output)?;
+            send.send(act_output).unwrap();
+            Ok(())
         });
         let result = recv.recv_timeout(Duration::from_millis(self.repo.config().hard_timeout));
         let end = Instant::now();
@@ -462,8 +469,8 @@ impl Program {
                 TestStatus::Timeout
             }
         };
-        let _ = in_thread.join().unwrap();
-        out_thread.join().unwrap();
+        in_thread.join().unwrap()?;
+        out_thread.join().unwrap()?;
         Ok(TestResult { status, time: dur })
     }
 
