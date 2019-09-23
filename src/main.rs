@@ -1,7 +1,6 @@
 use std::process;
 
-use clap::App;
-use clap::Arg;
+use clap::{App, Arg};
 
 pub use crate::config::*;
 pub use crate::repo::*;
