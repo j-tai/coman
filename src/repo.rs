@@ -46,6 +46,7 @@ pub struct Repository(Rc<RepoInner>);
 
 struct RepoInner {
     config: Config,
+    config_path: PathBuf,
     root: PathBuf,
     src: PathBuf,
     test: PathBuf,
@@ -58,6 +59,8 @@ impl Repository {
     /// Create a new `Repository`.
     pub fn new<P: Into<PathBuf>>(root: P, config: Config) -> Repository {
         let root = root.into();
+        let mut config_path = root.clone();
+        config_path.push("Coman.toml");
         let mut src = root.clone();
         src.push(&config.src_dir);
         let mut test = root.clone();
@@ -70,6 +73,7 @@ impl Repository {
         build_debug.push("debug");
         Repository(Rc::new(RepoInner {
             config,
+            config_path,
             root,
             src,
             test,
@@ -100,6 +104,11 @@ impl Repository {
     /// Get the repository's configuration.
     pub fn config(&self) -> &Config {
         &self.0.config
+    }
+
+    /// Get the path to the repository's configuration.
+    pub fn config_path(&self) -> &Path {
+        &self.0.config_path
     }
 
     /// Get the repository's root directory path.
@@ -289,15 +298,21 @@ impl Program {
     /// Check if the source file needs a recompile, e.g. due to
     /// modification.
     pub fn dirty(&self, debug: bool) -> bool {
-        fn _dirty(dst: &Path, src: &Path) -> io::Result<bool> {
+        fn try_dirty(dst: &Path, src: &Path) -> io::Result<bool> {
             let dst_time = dst.metadata()?.modified()?;
             let src_time = src.metadata()?.modified()?;
             Ok(dst_time < src_time)
         }
-        match _dirty(self.build_path(debug), self.source_path()) {
-            Ok(v) => v,
-            Err(_) => true,
+
+        fn is_dirty(dst: &Path, src: &Path) -> bool {
+            match try_dirty(dst, src) {
+                Ok(v) => v,
+                Err(_) => true,
+            }
         }
+
+        is_dirty(self.build_path(debug), self.source_path())
+            || is_dirty(self.build_path(debug), self.repo.config_path())
     }
 
     /// Compile the program if it has not already been compiled. If it
