@@ -467,10 +467,11 @@ impl Program {
         Ok(TestResult { status, time: dur })
     }
 
-    /// Compile and debug the program. The specified debugging program
-    /// in the configuration is called. This usually means that the
-    /// user is put into an interactive debugger like GDB. Returns
-    /// true if the debugger exited with success, or false otherwise.
+    /// Debug the program. The specified debugging program in the
+    /// configuration is called. This usually means that the user is
+    /// put into an interactive debugger like GDB. Returns true if the
+    /// debugger exited with success, or false otherwise. This assumes
+    /// that the program has already been compiled in debug mode.
     pub fn debug(&self) -> io::Result<bool> {
         let mut cmd = self.debug_command()?;
         let stat = cmd.status()?;
