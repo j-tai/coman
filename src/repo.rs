@@ -258,7 +258,7 @@ impl Program {
         let dst = self.build_path(debug);
         let ext = self.source_extension();
         if let Some(lang) = self.language() {
-            let cmd = if debug {
+            let cmd = if debug && !lang.compile_debug.is_empty() {
                 &lang.compile_debug
             } else {
                 &lang.compile
