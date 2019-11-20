@@ -11,7 +11,6 @@ pub mod repo;
 #[derive(Clone, Debug)]
 struct Arguments {
     action: Action,
-    debug_build: bool,
     test: Option<String>,
     program: Option<String>,
 }
@@ -22,6 +21,7 @@ enum Action {
     Run,
     Test,
     Debug,
+    Clean,
 }
 
 fn parse_args() -> Arguments {
@@ -50,7 +50,13 @@ fn parse_args() -> Arguments {
             Arg::with_name("debug")
                 .short("D")
                 .long("debug")
-                .help("Debug the solution (implies -d)"),
+                .help("Debug the solution"),
+        )
+        .arg(
+            Arg::with_name("clean")
+                .short("C")
+                .long("clean")
+                .help("Clean built binaries")
         )
         .arg(
             Arg::with_name("test-name")
@@ -71,25 +77,25 @@ fn parse_args() -> Arguments {
     let run = matches.is_present("run");
     let test = matches.is_present("test");
     let debug = matches.is_present("debug");
-    let action = match (build, run, test, debug) {
-        (false, false, false, false) => Action::Run,
-        (true, false, false, false) => Action::Build,
-        (false, true, false, false) => Action::Run,
-        (false, false, true, false) => Action::Test,
-        (false, false, false, true) => Action::Debug,
+    let clean = matches.is_present("clean");
+    let action = match (build, run, test, debug, clean) {
+        (false, false, false, false, false) => Action::Run,
+        (true, false, false, false, false) => Action::Build,
+        (false, true, false, false, false) => Action::Run,
+        (false, false, true, false, false) => Action::Test,
+        (false, false, false, true, false) => Action::Debug,
+        (false, false, false, false, true) => Action::Clean,
         _ => {
-            eprintln!("coman: only one of -B, -R, -T, and -D may be used at a time");
+            eprintln!("coman: only one of -B, -R, -T, -D, and -C may be used at a time");
             process::exit(2);
         }
     };
 
-    let debug_build = matches.is_present("debug-build");
     let test = matches.value_of("test-name").map(str::to_string);
     let program = matches.value_of("PROGRAM").map(str::to_string);
 
     Arguments {
         action,
-        debug_build,
         test,
         program,
     }
@@ -194,13 +200,15 @@ fn main() {
     };
 
     // Compiling the program
-    stepln!("COMPILE", "{}", program.name());
-    match program.compile(args.action == Action::Debug) {
-        Ok(true) => (),
-        Ok(false) => process::exit(2),
-        Err(e) => {
-            eprintln!("coman: compilation failed: {}", e);
-            process::exit(3);
+    if args.action != Action::Clean {
+        stepln!("COMPILE", "{}", program.name());
+        match program.compile(args.action == Action::Debug) {
+            Ok(true) => (),
+            Ok(false) => process::exit(2),
+            Err(e) => {
+                eprintln!("coman: compilation failed: {}", e);
+                process::exit(3);
+            }
         }
     }
 
@@ -248,5 +256,16 @@ fn main() {
         }
 
         Action::Build => (), // Building is done above, so we have nothing else to do
+
+        Action::Clean => {
+            stepln!("CLEAN", "{}", program.name());
+            match program.clean() {
+                Ok(()) => (),
+                Err(e) => {
+                    eprintln!("coman: cleaning program failed: {}", e);
+                    process::exit(2);
+                }
+            }
+        }
     }
 }

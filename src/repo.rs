@@ -477,6 +477,21 @@ impl Program {
         let stat = cmd.status()?;
         Ok(stat.success())
     }
+
+    /// Clean the program's binaries. This deletes the debug and
+    /// release binaries if they exist.
+    pub fn clean(&self) -> io::Result<()> {
+        fn try_delete_file(path: &Path) -> io::Result<()> {
+            match fs::remove_file(path) {
+                Ok(()) => Ok(()),
+                Err(ref e) if e.kind() == ErrorKind::NotFound => Ok(()),
+                Err(e) => Err(e),
+            }
+        }
+        try_delete_file(&self.build_debug)?;
+        try_delete_file(&self.build_release)?;
+        Ok(())
+    }
 }
 
 /// Result of a program test.
