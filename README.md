@@ -2,6 +2,8 @@
 
 Contest manager — easily run and test your programming contest solutions.
 
+[**Getting started**](https://github.com/j-tai/coman/wiki/Getting-started)
+
 ## How it works
 
 * You put your source code anywhere in the `src` directory, or a subdirectory of `src`.
