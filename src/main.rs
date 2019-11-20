@@ -56,7 +56,7 @@ fn parse_args() -> Arguments {
             Arg::with_name("clean")
                 .short("C")
                 .long("clean")
-                .help("Clean built binaries")
+                .help("Clean built binaries"),
         )
         .arg(
             Arg::with_name("test-name")
