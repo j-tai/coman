@@ -23,9 +23,11 @@ Simple, right?
 
 ## Building and installing
 
-To install this program, [install Rust](https://rustup.rs/) if you haven't already, and type
+To install this program, [install Rust](https://rustup.rs/) if you haven't already, clone the repository, and use cargo to install it:
 
 ```console
+$ git clone https://github.com/j-tai/coman.git
+$ cd coman
 $ cargo install --path .
 ```
 
