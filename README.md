@@ -23,7 +23,17 @@ Simple, right?
 
 ## Building and installing
 
-To install this program, [install Rust](https://rustup.rs/) if you haven't already, clone the repository, and use cargo to install it:
+To install this program, [install Rust](https://rustup.rs/) if you haven't already.
+
+You can install the latest version by typing:
+
+```console
+$ cargo install coman
+```
+
+This will install coman from crates.io.
+
+To install the latest development version, clone the repository and use cargo to install it:
 
 ```console
 $ git clone https://github.com/j-tai/coman.git
@@ -31,7 +41,7 @@ $ cd coman
 $ cargo install --path .
 ```
 
-If you want to just build the program, you can use
+Or, if you want to just build the program, you can use
 
 ```console
 $ cargo build --release
