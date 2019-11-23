@@ -3,6 +3,12 @@ name = "coman"
 version = "0.1.0"
 authors = ["Jasmine Tai <jtai@jtai.ca>"]
 edition = "2018"
+license = "GPL-3.0-or-later"
+description = "Easily run and test your programming contest solutions"
+homepage = "https://github.com/j-tai/coman"
+documentation = "https://github.com/j-tai/coman/wiki"
+repository = "https://github.com/j-tai/coman"
+readme = "README.md"
 
 [dependencies]
 clap = "2"
