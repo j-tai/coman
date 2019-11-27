@@ -1,6 +1,6 @@
 use getargs::{Error, Opt, Options, Result};
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Arguments<'a> {
     pub bad_usage: bool,
     pub show_help: bool,
@@ -8,17 +8,17 @@ pub struct Arguments<'a> {
     pub subcommand: Subcommand<'a>,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Subcommand<'a> {
     Build {
-        program: Option<&'a str>,
+        programs: Vec<&'a str>,
     },
     Run {
         program: Option<&'a str>,
     },
     Test {
         program: Option<&'a str>,
-        test: Option<&'a str>,
+        tests: Vec<&'a str>,
     },
     Debug {
         program: Option<&'a str>,
@@ -29,14 +29,13 @@ pub enum Subcommand<'a> {
     },
 }
 
-impl Default for Subcommand<'_> {
-    fn default() -> Self {
-        Subcommand::Build { program: None }
-    }
-}
-
 pub fn parse_args<'a>(opts: &'a Options<'a, String>) -> Result<Arguments<'a>> {
-    let mut res = Arguments::default();
+    let mut res = Arguments {
+        bad_usage: false,
+        show_help: false,
+        show_version: false,
+        subcommand: Subcommand::Run { program: None },
+    };
     while let Some(opt) = opts.next() {
         match opt? {
             Opt::Long("help") => res.show_help = true,
@@ -61,7 +60,7 @@ pub fn parse_args<'a>(opts: &'a Options<'a, String>) -> Result<Arguments<'a>> {
 
 fn parse_build_args<'a>(opts: &'a Options<'a, String>) -> Result<Subcommand<'a>> {
     Ok(Subcommand::Build {
-        program: opts.arg_str().map(|s| &s[..]),
+        programs: opts.args().iter().map(|s| &s[..]).collect(),
     })
 }
 
@@ -92,6 +91,6 @@ fn parse_run_args<'a>(opts: &'a Options<'a, String>) -> Result<Subcommand<'a>> {
 fn parse_test_args<'a>(opts: &'a Options<'a, String>) -> Result<Subcommand<'a>> {
     Ok(Subcommand::Test {
         program: opts.arg_str().map(|s| &s[..]),
-        test: opts.arg_str().map(|s| &s[..]),
+        tests: opts.args().iter().map(|s| &s[..]).collect(),
     })
 }
