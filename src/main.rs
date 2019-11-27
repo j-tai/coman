@@ -1,105 +1,15 @@
+use std::env;
 use std::process;
 
-use clap::{App, Arg};
+use getargs::Options;
 
+use crate::args::Subcommand;
 pub use crate::config::*;
 pub use crate::repo::*;
 
+mod args;
 pub mod config;
 pub mod repo;
-
-#[derive(Clone, Debug)]
-struct Arguments {
-    action: Action,
-    test: Option<String>,
-    program: Option<String>,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum Action {
-    Build,
-    Run,
-    Test,
-    Debug,
-    Clean,
-}
-
-fn parse_args() -> Arguments {
-    let matches = App::new("coman")
-        .version(env!("CARGO_PKG_VERSION"))
-        .about("Contest manager")
-        .arg(
-            Arg::with_name("build")
-                .short("B")
-                .long("build")
-                .help("Build the solution"),
-        )
-        .arg(
-            Arg::with_name("run")
-                .short("R")
-                .long("run")
-                .help("Run the solution (default)"),
-        )
-        .arg(
-            Arg::with_name("test")
-                .short("T")
-                .long("test")
-                .help("Test the solution"),
-        )
-        .arg(
-            Arg::with_name("debug")
-                .short("D")
-                .long("debug")
-                .help("Debug the solution"),
-        )
-        .arg(
-            Arg::with_name("clean")
-                .short("C")
-                .long("clean")
-                .help("Clean built binaries"),
-        )
-        .arg(
-            Arg::with_name("test-name")
-                .short("t")
-                .long("test-name")
-                .takes_value(true)
-                .value_name("TEST")
-                .help("Name of test to run"),
-        )
-        .arg(
-            Arg::with_name("PROGRAM")
-                .index(1)
-                .help("Path to solution source file"),
-        )
-        .get_matches();
-
-    let build = matches.is_present("build");
-    let run = matches.is_present("run");
-    let test = matches.is_present("test");
-    let debug = matches.is_present("debug");
-    let clean = matches.is_present("clean");
-    let action = match (build, run, test, debug, clean) {
-        (false, false, false, false, false) => Action::Run,
-        (true, false, false, false, false) => Action::Build,
-        (false, true, false, false, false) => Action::Run,
-        (false, false, true, false, false) => Action::Test,
-        (false, false, false, true, false) => Action::Debug,
-        (false, false, false, false, true) => Action::Clean,
-        _ => {
-            eprintln!("coman: only one of -B, -R, -T, -D, and -C may be used at a time");
-            process::exit(2);
-        }
-    };
-
-    let test = matches.value_of("test-name").map(str::to_string);
-    let program = matches.value_of("PROGRAM").map(str::to_string);
-
-    Arguments {
-        action,
-        test,
-        program,
-    }
-}
 
 macro_rules! step {
     ($name:expr , $( $arg:tt )+) => {{
@@ -121,6 +31,36 @@ macro_rules! stepln {
         eprintln!("\x1b[1m{:>8}\x1b[m", $name );
     }};
     ($name:expr ,) => { step!($name) };
+}
+
+fn get_program(repo: &Repository, program: Option<&str>) -> Program {
+    if let Some(name) = program {
+        if let Some(prgm) = repo.get_program(name) {
+            prgm
+        } else {
+            eprintln!("coman: {}: not found or outside repository", name);
+            process::exit(2);
+        }
+    } else {
+        if let Some(prgm) = repo.find_recent_program() {
+            prgm
+        } else {
+            eprintln!("coman: no solutions found");
+            process::exit(2);
+        }
+    }
+}
+
+fn do_build(program: &Program, debug: bool) {
+    stepln!("COMPILE", "{}", program.name());
+    match program.compile(debug) {
+        Ok(true) => (),
+        Ok(false) => process::exit(2),
+        Err(e) => {
+            eprintln!("coman: compilation failed: {}", e);
+            process::exit(3);
+        }
+    }
 }
 
 fn do_test(prgm: &Program, case: &str) -> bool {
@@ -169,7 +109,45 @@ fn do_test(prgm: &Program, case: &str) -> bool {
 }
 
 fn main() {
-    let args = parse_args();
+    let args: Vec<_> = env::args().skip(1).collect();
+    let options = Options::new(&args);
+    let args = match args::parse_args(&options) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("coman: usage error: {}", e);
+            process::exit(3);
+        }
+    };
+
+    if args.bad_usage || args.show_help {
+        print!(
+            "coman - Contest manager
+
+Usage: coman [OPTIONS] COMMAND
+
+Options:
+    --version  Print version and exit
+
+Commands:
+    build|b [SOLUTION]
+    clean|c [SOLUTION | --all]
+    debug|d [SOLUTION]
+    run|r [SOLUTION]
+    test|t [-t TEST] [SOLUTION]
+"
+        );
+        if args.bad_usage {
+            process::exit(3);
+        } else {
+            return;
+        }
+    }
+
+    if args.show_version {
+        println!("coman v{}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+
     let root = match find_root_dir() {
         Some(d) => d,
         None => {
@@ -185,37 +163,31 @@ fn main() {
         }
     };
 
-    let program = if let Some(ref prog) = args.program {
-        if let Some(p) = repo.get_program(prog) {
-            p
-        } else {
-            eprintln!("coman: {}: not found or outside repository", prog);
-            process::exit(2);
+    match args.subcommand {
+        Subcommand::Build { program } => {
+            let program = get_program(&repo, program);
+            do_build(&program, false);
         }
-    } else if let Some(p) = repo.find_recent_program() {
-        p
-    } else {
-        eprintln!("coman: cannot find any program to run");
-        process::exit(2);
-    };
 
-    // Compiling the program
-    if args.action != Action::Clean {
-        stepln!("COMPILE", "{}", program.name());
-        match program.compile(args.action == Action::Debug) {
-            Ok(true) => (),
-            Ok(false) => process::exit(2),
-            Err(e) => {
-                eprintln!("coman: compilation failed: {}", e);
-                process::exit(3);
+        Subcommand::Run { program } => {
+            let program = get_program(&repo, program);
+            do_build(&program, false);
+            stepln!("RUN", "{}", program.name());
+            match program.run() {
+                Ok(true) => (),
+                Ok(false) => process::exit(1),
+                Err(e) => {
+                    eprintln!("coman: running program failed: {}", e);
+                    process::exit(2);
+                }
             }
         }
-    }
 
-    match args.action {
-        Action::Test => {
+        Subcommand::Test { program, test } => {
+            let program = get_program(&repo, program);
+            do_build(&program, false);
             let mut all_ok = true;
-            if let Some(ref case) = args.test {
+            if let Some(case) = test {
                 all_ok = do_test(&program, case);
             } else {
                 // Testing all cases
@@ -230,20 +202,9 @@ fn main() {
             }
         }
 
-        Action::Run => {
-            stepln!("RUN", "{}", program.name());
-            match program.run() {
-                Ok(true) => (),
-                Ok(false) => process::exit(1),
-                Err(e) => {
-                    eprintln!("coman: running program failed: {}", e);
-                    process::exit(2);
-                }
-            }
-        }
-
-        Action::Debug => {
-            // Debugging the program
+        Subcommand::Debug { program } => {
+            let program = get_program(&repo, program);
+            do_build(&program, true);
             stepln!("DEBUG", "{}", program.name());
             match program.debug() {
                 Ok(true) => (),
@@ -255,15 +216,25 @@ fn main() {
             }
         }
 
-        Action::Build => (), // Building is done above, so we have nothing else to do
-
-        Action::Clean => {
-            stepln!("CLEAN", "{}", program.name());
-            match program.clean() {
-                Ok(()) => (),
-                Err(e) => {
-                    eprintln!("coman: cleaning program failed: {}", e);
-                    process::exit(2);
+        Subcommand::Clean { program, all } => {
+            if all {
+                stepln!("CLEAN", "all binaries");
+                match repo.clean_all() {
+                    Ok(()) => (),
+                    Err(e) => {
+                        eprintln!("coman: cleaning all binaries failed: {}", e);
+                        process::exit(2);
+                    }
+                }
+            } else {
+                let program = get_program(&repo, program);
+                stepln!("CLEAN", "{}", program.name());
+                match program.clean() {
+                    Ok(()) => (),
+                    Err(e) => {
+                        eprintln!("coman: cleaning program failed: {}", e);
+                        process::exit(2);
+                    }
                 }
             }
         }
