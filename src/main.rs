@@ -51,14 +51,14 @@ fn get_program(repo: &Repository, program: Option<&str>) -> Program {
     }
 }
 
-fn do_build(program: &Program, debug: bool) {
+fn do_build(program: &Program, debug: bool) -> i32 {
     stepln!("COMPILE", "{}", program.name());
     match program.compile(debug) {
-        Ok(true) => (),
-        Ok(false) => process::exit(2),
+        Ok(true) => 0,
+        Ok(false) => 2,
         Err(e) => {
             eprintln!("coman: compilation failed: {}", e);
-            process::exit(3);
+            3
         }
     }
 }
@@ -163,64 +163,78 @@ Commands:
         }
     };
 
+    let mut exit_code = 0;
+
     match args.subcommand {
         Subcommand::Build { programs } => {
             if programs.is_empty() {
                 let program = get_program(&repo, None);
-                do_build(&program, false);
+                exit_code = exit_code.max(do_build(&program, false));
             } else {
                 for program in programs {
                     let program = get_program(&repo, Some(program));
-                    do_build(&program, false);
+                    exit_code = exit_code.max(do_build(&program, false));
                 }
             }
         }
 
         Subcommand::Run { program } => {
             let program = get_program(&repo, program);
-            do_build(&program, false);
+            exit_code = do_build(&program, false);
+            if exit_code != 0 {
+                process::exit(exit_code);
+            }
+
             stepln!("RUN", "{}", program.name());
-            match program.run() {
-                Ok(true) => (),
-                Ok(false) => process::exit(1),
+            exit_code = match program.run() {
+                Ok(true) => 0,
+                Ok(false) => 1,
                 Err(e) => {
                     eprintln!("coman: running program failed: {}", e);
-                    process::exit(2);
+                    2
                 }
-            }
+            };
         }
 
         Subcommand::Test { program, tests } => {
             let program = get_program(&repo, program);
-            do_build(&program, false);
-            let mut all_ok = true;
+            exit_code = do_build(&program, false);
+            if exit_code != 0 {
+                process::exit(exit_code);
+            }
+
             if tests.is_empty() {
                 // Testing all cases
                 let mut cases = program.test_cases();
                 cases.sort_unstable();
                 for case in &cases {
-                    all_ok = do_test(&program, case) && all_ok;
+                    if !do_test(&program, case) {
+                        exit_code = 1;
+                    }
                 }
             } else {
                 for case in tests {
-                    all_ok = do_test(&program, case) && all_ok;
+                    if !do_test(&program, case) {
+                        exit_code = 1;
+                    }
                 }
-            }
-            if !all_ok {
-                process::exit(1);
             }
         }
 
         Subcommand::Debug { program } => {
             let program = get_program(&repo, program);
-            do_build(&program, true);
+            exit_code = do_build(&program, true);
+            if exit_code != 0 {
+                process::exit(exit_code);
+            }
+
             stepln!("DEBUG", "{}", program.name());
-            match program.debug() {
-                Ok(true) => (),
-                Ok(false) => process::exit(1),
+            exit_code = match program.debug() {
+                Ok(true) => 0,
+                Ok(false) => 1,
                 Err(e) => {
                     eprintln!("coman: debugging program failed: {}", e);
-                    process::exit(2);
+                    2
                 }
             }
         }
@@ -228,24 +242,26 @@ Commands:
         Subcommand::Clean { program, all } => {
             if all {
                 stepln!("CLEAN", "all binaries");
-                match repo.clean_all() {
-                    Ok(()) => (),
+                exit_code = match repo.clean_all() {
+                    Ok(()) => 0,
                     Err(e) => {
                         eprintln!("coman: cleaning all binaries failed: {}", e);
-                        process::exit(2);
+                        2
                     }
                 }
             } else {
                 let program = get_program(&repo, program);
                 stepln!("CLEAN", "{}", program.name());
-                match program.clean() {
-                    Ok(()) => (),
+                exit_code = match program.clean() {
+                    Ok(()) => 0,
                     Err(e) => {
                         eprintln!("coman: cleaning program failed: {}", e);
-                        process::exit(2);
+                        2
                     }
                 }
             }
         }
     }
+
+    process::exit(exit_code);
 }
