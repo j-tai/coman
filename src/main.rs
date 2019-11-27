@@ -129,11 +129,11 @@ Options:
     --version  Print version and exit
 
 Commands:
-    build|b [SOLUTION]
+    build|b [SOLUTION ...]
     clean|c [SOLUTION | --all]
     debug|d [SOLUTION]
     run|r [SOLUTION]
-    test|t [-t TEST] [SOLUTION]
+    test|t [SOLUTION] [TEST ...]
 "
         );
         if args.bad_usage {
@@ -164,9 +164,16 @@ Commands:
     };
 
     match args.subcommand {
-        Subcommand::Build { program } => {
-            let program = get_program(&repo, program);
-            do_build(&program, false);
+        Subcommand::Build { programs } => {
+            if programs.is_empty() {
+                let program = get_program(&repo, None);
+                do_build(&program, false);
+            } else {
+                for program in programs {
+                    let program = get_program(&repo, Some(program));
+                    do_build(&program, false);
+                }
+            }
         }
 
         Subcommand::Run { program } => {
@@ -183,17 +190,19 @@ Commands:
             }
         }
 
-        Subcommand::Test { program, test } => {
+        Subcommand::Test { program, tests } => {
             let program = get_program(&repo, program);
             do_build(&program, false);
             let mut all_ok = true;
-            if let Some(case) = test {
-                all_ok = do_test(&program, case);
-            } else {
+            if tests.is_empty() {
                 // Testing all cases
                 let mut cases = program.test_cases();
                 cases.sort_unstable();
                 for case in &cases {
+                    all_ok = do_test(&program, case) && all_ok;
+                }
+            } else {
+                for case in tests {
                     all_ok = do_test(&program, case) && all_ok;
                 }
             }
