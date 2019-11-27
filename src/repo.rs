@@ -191,6 +191,15 @@ impl Repository {
         }
         self.get_program(best_prog?)
     }
+
+    /// Clean all compiled binaries from the repository.
+    pub fn clean_all(&self) -> io::Result<()> {
+        match fs::remove_dir_all(&self.0.build) {
+            Ok(()) => Ok(()),
+            Err(ref e) if e.kind() == ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
 }
 
 pub struct Program {
