@@ -134,6 +134,7 @@ Commands:
     debug|d [SOLUTION]
     run|r [SOLUTION]
     test|t [SOLUTION] [TEST ...]
+    cmake
 "
         );
         if args.bad_usage {
@@ -259,6 +260,15 @@ Commands:
                         2
                     }
                 }
+            }
+        }
+
+        Subcommand::CMake => {
+            stepln!("GENERATE", "CMakeLists.txt");
+            let result = repo.write_cmake();
+            if let Err(e) = result {
+                eprintln!("coman: cannot create CMakeLists.txt: {}", e);
+                exit_code = 2;
             }
         }
     }
