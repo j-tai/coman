@@ -5,7 +5,6 @@ use std::io;
 use std::io::{Error, ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::rc::Rc;
 use std::sync::mpsc;
 use std::thread;
 use std::thread::JoinHandle;
@@ -39,12 +38,9 @@ pub fn find_root_dir() -> Option<PathBuf> {
 }
 
 /// A struct representing a contest repository. This struct is
-/// immutable. Also note that cloning this struct will simply copy a
-/// reference to the same repository.
+/// immutable.
 #[derive(Clone)]
-pub struct Repository(Rc<RepoInner>);
-
-struct RepoInner {
+pub struct Repository {
     config: Config,
     config_path: PathBuf,
     root: PathBuf,
@@ -71,7 +67,7 @@ impl Repository {
         build_release.push("release");
         let mut build_debug = build.clone();
         build_debug.push("debug");
-        Repository(Rc::new(RepoInner {
+        Repository {
             config,
             config_path,
             root,
@@ -80,7 +76,7 @@ impl Repository {
             build,
             build_release,
             build_debug,
-        }))
+        }
     }
 
     /// Create a new `Repository`, reading the configuration files
@@ -103,42 +99,42 @@ impl Repository {
 
     /// Get the repository's configuration.
     pub fn config(&self) -> &Config {
-        &self.0.config
+        &self.config
     }
 
     /// Get the path to the repository's configuration.
     pub fn config_path(&self) -> &Path {
-        &self.0.config_path
+        &self.config_path
     }
 
     /// Get the repository's root directory path.
     pub fn root(&self) -> &Path {
-        &self.0.root
+        &self.root
     }
 
     /// Get the repository's source directory path.
     pub fn source_path(&self) -> &Path {
-        &self.0.src
+        &self.src
     }
 
     /// Get the repository's test directory path.
     pub fn test_path(&self) -> &Path {
-        &self.0.test
+        &self.test
     }
 
     /// Get the repository's build directory path.
     pub fn build_path(&self) -> &Path {
-        &self.0.build
+        &self.build
     }
 
     /// Get the repository's release build directory path.
     pub fn build_release_path(&self) -> &Path {
-        &self.0.build_release
+        &self.build_release
     }
 
     /// Get the repository's debug build directory path.
     pub fn build_debug_path(&self) -> &Path {
-        &self.0.build_debug
+        &self.build_debug
     }
 
     /// Get a `Program` from the path to its source code. Returns
@@ -161,7 +157,7 @@ impl Repository {
         let mut build_debug = self.build_debug_path().to_path_buf();
         build_debug.push(&path);
         Some(Program {
-            repo: self.clone(),
+            repo: &self,
             path: path.to_path_buf(),
             src,
             test,
@@ -194,7 +190,7 @@ impl Repository {
 
     /// Clean all compiled binaries from the repository.
     pub fn clean_all(&self) -> io::Result<()> {
-        match fs::remove_dir_all(&self.0.build) {
+        match fs::remove_dir_all(&self.build) {
             Ok(()) => Ok(()),
             Err(ref e) if e.kind() == ErrorKind::NotFound => Ok(()),
             Err(e) => Err(e),
@@ -202,8 +198,8 @@ impl Repository {
     }
 }
 
-pub struct Program {
-    repo: Repository,
+pub struct Program<'a> {
+    repo: &'a Repository,
     path: PathBuf,
     src: PathBuf,
     test: PathBuf,
@@ -211,7 +207,7 @@ pub struct Program {
     build_debug: PathBuf,
 }
 
-impl Program {
+impl Program<'_> {
     /// Get the name of the program.
     pub fn name(&self) -> &str {
         self.path.to_str().unwrap()
