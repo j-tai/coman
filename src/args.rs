@@ -27,6 +27,7 @@ pub enum Subcommand<'a> {
         program: Option<&'a str>,
         all: bool,
     },
+    CMake,
 }
 
 pub fn parse_args<'a>(opts: &'a Options<'a, String>) -> Result<Arguments<'a>> {
@@ -50,6 +51,7 @@ pub fn parse_args<'a>(opts: &'a Options<'a, String>) -> Result<Arguments<'a>> {
         "debug" | "d" => parse_debug_args(opts)?,
         "run" | "r" => parse_run_args(opts)?,
         "test" | "t" => parse_test_args(opts)?,
+        "cmake" => Subcommand::CMake,
         _ => {
             res.bad_usage = true;
             return Ok(res);

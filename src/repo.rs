@@ -196,6 +196,54 @@ impl Repository {
             Err(e) => Err(e),
         }
     }
+
+    /// Write a CMakeLists.txt file to the given writer.
+    pub fn write_cmake_to(&self, mut w: impl Write) -> io::Result<()> {
+        writeln!(w, "cmake_minimum_required(VERSION 3.9)")?;
+        writeln!(
+            w,
+            "project({:?})",
+            self.root.file_name().unwrap().to_string_lossy(),
+        )?;
+        writeln!(w, "set(CMAKE_CXX_STANDARD 11)")?;
+        // Add all the programs
+        for ent in WalkDir::new(self.source_path()) {
+            if let Ok(ent) = ent {
+                if ent.file_type().is_file() {
+                    let path = ent.path().strip_prefix(self.source_path()).unwrap();
+                    let src_path = ent.path().strip_prefix(self.root()).unwrap();
+                    let bin_path = path.to_string_lossy().replace('/', ".");
+                    match ent.path().extension().unwrap().to_str() {
+                        Some("cpp") => {
+                            writeln!(w, "add_executable({:?} {:?})", bin_path, src_path.display())?;
+                            writeln!(
+                                w,
+                                "set_target_properties({:?} PROPERTIES LINKER_LANGUAGE CXX)",
+                                bin_path,
+                            )?;
+                        }
+                        Some("c") => {
+                            writeln!(w, "add_executable({:?} {:?})", bin_path, src_path.display())?;
+                            writeln!(
+                                w,
+                                "set_target_properties({:?} PROPERTIES LINKER_LANGUAGE C)",
+                                bin_path,
+                            )?;
+                        }
+                        _ => (),
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Write or update the CMakeLists.txt file.
+    pub fn write_cmake(&self) -> io::Result<()> {
+        let filename = self.root().join("CMakeLists.txt");
+        let f = File::create(filename)?;
+        self.write_cmake_to(f)
+    }
 }
 
 pub struct Program<'a> {
