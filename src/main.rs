@@ -33,7 +33,7 @@ macro_rules! stepln {
     ($name:expr ,) => { step!($name) };
 }
 
-fn get_program(repo: &Repository, program: Option<&str>) -> Program {
+fn get_program<'a>(repo: &'a Repository, program: Option<&str>) -> Program<'a> {
     if let Some(name) = program {
         if let Some(prgm) = repo.get_program(name) {
             prgm
