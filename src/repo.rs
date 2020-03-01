@@ -484,7 +484,13 @@ impl Program<'_> {
         let mut child = cmd.spawn()?;
         let mut stdin = child.stdin.take().unwrap();
         // This thread copies the input data to the process's stdin.
-        let in_thread = thread::spawn(move || stdin.write_all(&input));
+        let in_thread = thread::spawn(move || {
+            match stdin.write_all(&input) {
+                Ok(()) => Ok(()),
+                Err(ref e) if e.kind() == ErrorKind::BrokenPipe => Ok(()),
+                Err(e) => Err(e),
+            }
+        });
         let mut stdout = child.stdout.take().unwrap();
         let (send, recv) = mpsc::channel();
         // This thread reads the output from the child process.
