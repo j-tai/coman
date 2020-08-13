@@ -1,4 +1,6 @@
 use std::env;
+use std::fs;
+use std::path::Path;
 use std::process;
 
 use getargs::Options;
@@ -51,16 +53,33 @@ fn get_program<'a>(repo: &'a Repository, program: Option<&str>) -> Program<'a> {
     }
 }
 
-fn do_build(program: &Program, debug: bool) -> i32 {
+fn do_build(program: &Program, debug: bool, output: Option<&str>) -> i32 {
     stepln!("COMPILE", "{}", program.name());
-    match program.compile(debug) {
+    let result = match program.compile(debug) {
         Ok(true) => 0,
         Ok(false) => 2,
         Err(e) => {
             eprintln!("coman: compilation failed: {}", e);
             3
         }
+    };
+    if let Some(output) = output {
+        let from = if debug {
+            program.build_debug_path()
+        } else {
+            program.build_release_path()
+        };
+        let to = Path::new(output);
+        if let Err(e) = fs::create_dir_all(to.parent().unwrap()) {
+            eprintln!("coman: failed to create parent dirs of {:?}: {}", to, e);
+            return 3;
+        }
+        if let Err(e) = fs::copy(from, to) {
+            eprintln!("coman: failed to copy {:?} to {:?}: {}", from, to, e);
+            return 3;
+        }
     }
+    result
 }
 
 fn do_test(prgm: &Program, case: &str) -> bool {
@@ -129,7 +148,7 @@ Options:
     --version  Print version and exit
 
 Commands:
-    build|b [SOLUTION ...]
+    build|b [-d] [-o OUTPUT] [SOLUTION ...]
     clean|c [SOLUTION | --all]
     debug|d [SOLUTION]
     run|r [SOLUTION]
@@ -167,21 +186,25 @@ Commands:
     let mut exit_code = 0;
 
     match args.subcommand {
-        Subcommand::Build { programs } => {
+        Subcommand::Build {
+            programs,
+            debug,
+            output,
+        } => {
             if programs.is_empty() {
                 let program = get_program(&repo, None);
-                exit_code = exit_code.max(do_build(&program, false));
+                exit_code = exit_code.max(do_build(&program, debug, output));
             } else {
                 for program in programs {
                     let program = get_program(&repo, Some(program));
-                    exit_code = exit_code.max(do_build(&program, false));
+                    exit_code = exit_code.max(do_build(&program, debug, output));
                 }
             }
         }
 
         Subcommand::Run { program } => {
             let program = get_program(&repo, program);
-            exit_code = do_build(&program, false);
+            exit_code = do_build(&program, false, None);
             if exit_code != 0 {
                 process::exit(exit_code);
             }
@@ -199,7 +222,7 @@ Commands:
 
         Subcommand::Test { program, tests } => {
             let program = get_program(&repo, program);
-            exit_code = do_build(&program, false);
+            exit_code = do_build(&program, false, None);
             if exit_code != 0 {
                 process::exit(exit_code);
             }
@@ -224,7 +247,7 @@ Commands:
 
         Subcommand::Debug { program } => {
             let program = get_program(&repo, program);
-            exit_code = do_build(&program, true);
+            exit_code = do_build(&program, true, None);
             if exit_code != 0 {
                 process::exit(exit_code);
             }

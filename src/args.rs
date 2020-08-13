@@ -12,6 +12,8 @@ pub struct Arguments<'a> {
 pub enum Subcommand<'a> {
     Build {
         programs: Vec<&'a str>,
+        debug: bool,
+        output: Option<&'a str>,
     },
     Run {
         program: Option<&'a str>,
@@ -61,8 +63,19 @@ pub fn parse_args<'a>(opts: &'a Options<'a, String>) -> Result<Arguments<'a>> {
 }
 
 fn parse_build_args<'a>(opts: &'a Options<'a, String>) -> Result<Subcommand<'a>> {
+    let mut debug = false;
+    let mut output = None;
+    while let Some(opt) = opts.next() {
+        match opt? {
+            Opt::Short('d') | Opt::Long("debug") => debug = true,
+            Opt::Short('o') | Opt::Long("output") => output = Some(opts.value_str()?),
+            o => return Err(Error::UnknownOpt(o)),
+        }
+    }
     Ok(Subcommand::Build {
         programs: opts.args().iter().map(|s| &s[..]).collect(),
+        debug,
+        output,
     })
 }
 
