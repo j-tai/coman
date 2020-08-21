@@ -79,18 +79,15 @@ fn do_test(prgm: &Program, case: &str) -> bool {
     match result {
         Ok(result) => {
             match result.status {
-                TestStatus::Pass => eprint!("\x1b[1;32mpass\x1b[m "),
-                TestStatus::Wrong => eprint!("\x1b[1;31mwrong\x1b[m "),
-                TestStatus::Crash => eprint!("\x1b[1;31mcrash\x1b[m "),
-                TestStatus::Timeout => eprint!("\x1b[1;33mtimeout\x1b[m "),
-                TestStatus::PassTimeout => eprint!("\x1b[1;32mpass\x1b[m-\x1b[1;33mtimeout\x1b[m "),
-                TestStatus::WrongTimeout => {
-                    eprint!("\x1b[1;31mwrong\x1b[m-\x1b[1;33mtimeout\x1b[m ")
-                }
-                TestStatus::CrashTimeout => {
-                    eprint!("\x1b[1;31mcrash\x1b[m-\x1b[1;33mtimeout\x1b[m ")
-                }
+                TestStatus::Pass => eprint!("\x1b[1;32mpass\x1b[m"),
+                TestStatus::Wrong => eprint!("\x1b[1;31mwrong\x1b[m"),
+                TestStatus::Crash => eprint!("\x1b[1;31mcrash\x1b[m"),
+                TestStatus::Timeout => eprint!("\x1b[1;33mtimeout\x1b[m"),
             }
+            if result.timeout && result.status != TestStatus::Timeout {
+                eprint!("-\x1b[1;33mtimeout\x1b[m");
+            }
+            eprint!(" ");
             let seconds = result.time.as_secs();
             let millis = result.time.subsec_millis();
             let micros = result.time.subsec_micros() % 1000;
@@ -109,7 +106,7 @@ fn do_test(prgm: &Program, case: &str) -> bool {
             } else {
                 eprintln!("0.{:03} ms", micros);
             }
-            result.status == TestStatus::Pass
+            result.status == TestStatus::Pass && !result.timeout
         }
         Err(e) => {
             eprintln!("{}", e);
