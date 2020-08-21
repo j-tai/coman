@@ -14,25 +14,16 @@ pub mod config;
 pub mod repo;
 
 macro_rules! step {
-    ($name:expr , $( $arg:tt )+) => {{
-        eprint!("\x1b[1m{:>8}\x1b[m ", $name );
-        eprint!( $( $arg)* );
+    ($name:expr $(, $arg:expr)+ $(,)?) => {{
+        eprint!("\x1b[1m{:>8}\x1b[m ", $name);
+        eprint!( $($arg),+ );
     }};
-    ($name:expr) => {{
-        eprint!("\x1b[1m{:>8}\x1b[m", $name );
-    }};
-    ($name:expr ,) => { step!($name) };
 }
 
 macro_rules! stepln {
-    ($name:expr , $( $arg:tt )+) => {{
-        eprint!("\x1b[1m{:>8}\x1b[m ", $name );
-        eprintln!( $( $arg)* );
+    ($name:expr, $msg:literal $(, $arg:expr)* $(,)?) => {{
+        step!($name, concat!($msg, "\n"), $($arg),* );
     }};
-    ($name:expr) => {{
-        eprintln!("\x1b[1m{:>8}\x1b[m", $name );
-    }};
-    ($name:expr ,) => { step!($name) };
 }
 
 fn get_program<'a>(repo: &'a Repository, program: Option<&str>) -> Program<'a> {
