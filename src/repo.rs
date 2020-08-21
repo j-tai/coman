@@ -501,31 +501,19 @@ impl Program<'_> {
         let result = recv.recv_timeout(Duration::from_millis(self.repo.config().hard_timeout));
         let end = Instant::now();
         let dur = end - begin;
+        let timeout = (dur.as_secs() * 1000 + u64::from(dur.subsec_millis()))
+            >= self.repo.config().soft_timeout;
         let status = match result {
             Ok(act_output) => {
                 // Program exited before the hard timeout
                 let mut exp_output = vec![];
                 out_file.read_to_end(&mut exp_output)?;
-                let timed_out = (dur.as_secs() * 1000 + u64::from(dur.subsec_millis()))
-                    >= self.repo.config().soft_timeout;
                 if !child.wait()?.success() {
-                    if timed_out {
-                        TestStatus::CrashTimeout
-                    } else {
-                        TestStatus::Crash
-                    }
+                    TestStatus::Crash
                 } else if act_output == exp_output {
-                    if timed_out {
-                        TestStatus::PassTimeout
-                    } else {
-                        TestStatus::Pass
-                    }
+                    TestStatus::Pass
                 } else {
-                    if timed_out {
-                        TestStatus::WrongTimeout
-                    } else {
-                        TestStatus::Wrong
-                    }
+                    TestStatus::Wrong
                 }
             }
             Err(_) => {
@@ -536,7 +524,11 @@ impl Program<'_> {
         };
         in_thread.join().unwrap()?;
         out_thread.join().unwrap()?;
-        Ok(TestResult { status, time: dur })
+        Ok(TestResult {
+            status,
+            time: dur,
+            timeout,
+        })
     }
 
     /// Debug the program. The specified debugging program in the
@@ -571,6 +563,7 @@ impl Program<'_> {
 pub struct TestResult {
     pub status: TestStatus,
     pub time: Duration,
+    pub timeout: bool,
 }
 
 /// Result type of the test.
@@ -580,7 +573,4 @@ pub enum TestStatus {
     Wrong,
     Crash,
     Timeout,
-    PassTimeout,
-    WrongTimeout,
-    CrashTimeout,
 }
