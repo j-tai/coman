@@ -9,7 +9,7 @@ Contest manager — easily run and test your programming contest solutions.
 * You put your source code anywhere in the `src` directory, or a subdirectory of `src`.
 * You run `coman`. This will automatically find which source file you are working on and will compile and run it.
 * You put tests in the `test` directory.
-* You run `coman -T`. This will run each test and display the results.
+* You run `coman test`. This will run each test and display the results.
 
 Simple, right?
 
