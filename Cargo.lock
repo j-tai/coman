@@ -3,6 +3,12 @@
 version = 3
 
 [[package]]
+name = "alphanumeric-sort"
+version = "1.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20e59b2ccb4c1ffbbf45af6f493e16ac65a66981c85664f1587816c0b08cd698"
+
+[[package]]
 name = "anyhow"
 version = "1.0.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18,6 +24,7 @@ checksum = "4a72c244c1ff497a746a7e1fb3d14bd08420ecda70c8f25c7112f2781652d787"
 name = "coman"
 version = "0.2.1"
 dependencies = [
+ "alphanumeric-sort",
  "anyhow",
  "getargs",
  "serde",
