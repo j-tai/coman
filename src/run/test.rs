@@ -83,43 +83,56 @@ pub fn open_test_files_for_case(
 /// Compile and test the program. The program's output is compared
 /// to the expected output, and its error stream is discarded.
 pub fn test(prog: &Program, case: &str) -> Result<TestResult> {
-    let mut cmd = get_run_command(prog);
+    // Read the entire input file, to avoid slowdowns due to XZ decoding
     let (mut in_file, mut out_file) = open_test_files_for_case(prog, case)?;
-    cmd.stdin(Stdio::piped());
-    cmd.stdout(Stdio::piped());
-    cmd.stderr(Stdio::null());
     let mut input = vec![];
     in_file
         .read_to_end(&mut input)
         .context("failed to read test input file")?;
 
+    // Start the program
+    let mut cmd = get_run_command(prog);
+    cmd.stdin(Stdio::piped());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::null());
     let begin = Instant::now();
     let mut child = cmd
         .spawn()
         .with_context(|| format!("failed to run command {:?}", cmd))?;
+
+    // Feed input file into stdin
     let mut stdin = child.stdin.take().unwrap();
-    // This thread copies the input data to the process's stdin.
     let in_thread = thread::spawn(move || match stdin.write_all(&input) {
+        // This thread copies the input data to the process's stdin.
         Ok(()) => Ok(()),
         Err(ref e) if e.kind() == ErrorKind::BrokenPipe => Ok(()),
         Err(e) => Err(e),
     });
+
+    // Capture the data from stdout
     let mut stdout = child.stdout.take().unwrap();
+    // The output is sent through this channel. We can't just return this value
+    // when the thread exits, because that doesn't allow us to `recv_timeout`.
     let (send, recv) = mpsc::channel();
-    // This thread reads the output from the child process.
     let out_thread: JoinHandle<io::Result<()>> = thread::spawn(move || {
+        // This thread reads the output from the child process.
         let mut act_output = vec![];
         stdout.read_to_end(&mut act_output)?;
         send.send(act_output).unwrap();
         Ok(())
     });
+
+    // Get the result with the hard timeout
     let result = recv.recv_timeout(Duration::from_millis(
         prog.repository().config().hard_timeout,
     ));
+    // Calculate the end time and time taken
     let end = Instant::now();
     let dur = end - begin;
     let timeout = (dur.as_secs() * 1000 + u64::from(dur.subsec_millis()))
         >= prog.repository().config().soft_timeout;
+
+    // Test outcome
     let status = match result {
         Ok(act_output) => {
             // Program exited before the hard timeout
@@ -141,14 +154,18 @@ pub fn test(prog: &Program, case: &str) -> Result<TestResult> {
             TestStatus::Timeout
         }
     };
+
+    // Let the threads finish
     in_thread
         .join()
         .unwrap()
-        .context("panic in input feeding thread")?;
+        .context("error in input feeding thread")?;
+
     out_thread
         .join()
         .unwrap()
-        .context("error in output capturing thread")?;
+        .context("error in stdout capturing thread")?;
+
     Ok(TestResult {
         status,
         time: dur,
