@@ -8,10 +8,12 @@ use getargs::Options;
 use crate::args::Subcommand;
 pub use crate::config::*;
 pub use crate::repo::*;
+use crate::run::TestStatus;
 
 mod args;
 pub mod config;
 pub mod repo;
+pub mod run;
 
 macro_rules! step {
     ($name:expr $(, $arg:expr)+ $(,)?) => {{
@@ -46,7 +48,7 @@ fn get_program<'a>(repo: &'a Repository, program: Option<&str>) -> Program<'a> {
 
 fn do_build(program: &Program, debug: bool, output: Option<&str>) -> i32 {
     stepln!("COMPILE", "{}", program.name());
-    let result = match program.compile(debug) {
+    let result = match run::compile(program, debug) {
         Ok(true) => 0,
         Ok(false) => 2,
         Err(e) => {
@@ -73,9 +75,9 @@ fn do_build(program: &Program, debug: bool, output: Option<&str>) -> i32 {
     result
 }
 
-fn do_test(prgm: &Program, case: &str) -> bool {
+fn do_test(prog: &Program, case: &str) -> bool {
     step!("TEST", "{}: ", case);
-    let result = prgm.test(case);
+    let result = run::test(prog, case);
     match result {
         Ok(result) => {
             match result.status {
@@ -88,6 +90,7 @@ fn do_test(prgm: &Program, case: &str) -> bool {
                 eprint!("-\x1b[1;33mtimeout\x1b[m");
             }
             eprint!(" ");
+
             let seconds = result.time.as_secs();
             let millis = result.time.subsec_millis();
             let micros = result.time.subsec_micros() % 1000;
@@ -198,7 +201,7 @@ Commands:
             }
 
             stepln!("RUN", "{}", program.name());
-            exit_code = match program.run() {
+            exit_code = match run::run(&program) {
                 Ok(true) => 0,
                 Ok(false) => 1,
                 Err(e) => {
@@ -217,7 +220,7 @@ Commands:
 
             if tests.is_empty() {
                 // Testing all cases
-                let mut cases = program.test_cases();
+                let mut cases = run::get_test_cases(&program);
                 cases.sort_unstable();
                 for case in &cases {
                     if !do_test(&program, case) {
@@ -241,7 +244,7 @@ Commands:
             }
 
             stepln!("DEBUG", "{}", program.name());
-            exit_code = match program.debug() {
+            exit_code = match run::debug(&program) {
                 Ok(true) => 0,
                 Ok(false) => 1,
                 Err(e) => {
@@ -254,7 +257,7 @@ Commands:
         Subcommand::Clean { program, all } => {
             if all {
                 stepln!("CLEAN", "all binaries");
-                exit_code = match repo.clean_all() {
+                exit_code = match run::clean_all(&repo) {
                     Ok(()) => 0,
                     Err(e) => {
                         eprintln!("coman: cleaning all binaries failed: {}", e);
@@ -264,7 +267,7 @@ Commands:
             } else {
                 let program = get_program(&repo, program);
                 stepln!("CLEAN", "{}", program.name());
-                exit_code = match program.clean() {
+                exit_code = match run::clean(&program) {
                     Ok(()) => 0,
                     Err(e) => {
                         eprintln!("coman: cleaning program failed: {}", e);
@@ -276,7 +279,7 @@ Commands:
 
         Subcommand::CMake => {
             stepln!("GENERATE", "CMakeLists.txt");
-            let result = repo.write_cmake();
+            let result = run::write_cmake(&repo);
             if let Err(e) = result {
                 eprintln!("coman: cannot create CMakeLists.txt: {}", e);
                 exit_code = 2;
