@@ -1,5 +1,5 @@
 # coman configuration file
-# Documentation: https://github.com/j-tai/coman/wiki/Command-reference
+# Documentation: https://github.com/j-tai/coman/wiki/Configuration-reference
 
 [languages.c]
 compile = ["gcc", "-Wall", "-Wextra", "-pedantic", "-lm", "-O3", "-DCOMAN", "-o", "{build}", "{source}"]
