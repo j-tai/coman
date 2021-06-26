@@ -6,6 +6,7 @@ pub use build::*;
 pub use clean::*;
 pub use cmake::*;
 pub use debug::*;
+pub use init::*;
 pub use run::*;
 pub use test::*;
 
@@ -13,6 +14,7 @@ mod build;
 mod clean;
 mod cmake;
 mod debug;
+mod init;
 mod run;
 mod test;
 

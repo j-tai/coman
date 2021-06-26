@@ -65,6 +65,12 @@ fn try_main(args: Arguments) -> Result<bool> {
     let repo = Repository::read(root)?;
 
     match args.subcommand {
+        Subcommand::Init => {
+            stepln!("INIT", "coman repository");
+            run::init()?;
+            Ok(true)
+        }
+
         Subcommand::Build {
             programs,
             debug,
@@ -165,6 +171,7 @@ Options:
     --version  Print version and exit
 
 Commands:
+    init
     build|b [-d] [-o OUTPUT] [SOLUTION ...]
     clean|c [SOLUTION | --all]
     debug|d [SOLUTION]

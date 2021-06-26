@@ -1,0 +1,23 @@
+# coman configuration file
+# Documentation: https://github.com/j-tai/coman/wiki/Command-reference
+
+[languages.c]
+compile = ["gcc", "-Wall", "-Wextra", "-pedantic", "-lm", "-O3", "-DCOMAN", "-o", "{build}", "{source}"]
+compile_debug = ["gcc", "-Wall", "-Wextra", "-pedantic", "-lm", "-g", "-DCOMAN", "-o", "{build}", "{source}"]
+debug = ["gdb", "-q", "-tui", "{build}"]
+
+[languages.cpp]
+compile = ["g++", "-std=c++14", "-Wall", "-Wextra", "-pedantic", "-lm", "-O3", "-DCOMAN", "-fsanitize=undefined", "-o", "{build}", "{source}"]
+compile_debug = ["g++", "-std=c++14", "-Wall", "-Wextra", "-pedantic", "-lm", "-g", "-DCOMAN", "-fsanitize=undefined", "-o", "{build}", "{source}"]
+debug = ["gdb", "-q", "-tui", "{build}"]
+
+[languages.py]
+run = ["python3", "{build}"]
+
+[languages.rs]
+compile = ["rustc", "-O", "-o", "{build}", "{source}"]
+compile_debug = ["rustc", "-o", "{build}", "{source}"]
+debug = ["gdb", "-tui", "{build}"]
+
+[languages.swift]
+compile = ["swiftc", "-O", "-o", "{build}", "{source}"]
