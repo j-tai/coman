@@ -33,7 +33,11 @@ $ cargo install coman
 
 This will install coman from crates.io.
 
-To install the latest development version, clone the repository and use cargo to install it:
+Now, check out the [**getting started**](https://github.com/j-tai/coman/wiki/Getting-started) tutorial.
+
+### Install the development version
+
+Clone the repository and use cargo to install it:
 
 ```console
 $ git clone https://github.com/j-tai/coman.git
