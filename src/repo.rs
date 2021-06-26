@@ -1,10 +1,10 @@
-use std::env;
 use std::fs::File;
-use std::io;
 use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+use std::{env, fmt};
 
+use anyhow::{bail, Context, Result};
 use walkdir::WalkDir;
 
 use crate::Config;
@@ -15,20 +15,17 @@ use crate::Language;
 /// This function searches the cwd's parent directories until it finds one
 /// containing `Coman.toml`. This returns `None` if no root directory was found
 /// or the current directory cannot be fetched.
-pub fn find_root_dir() -> Option<PathBuf> {
-    let mut path = match env::current_dir() {
-        Ok(d) => d,
-        Err(_) => return None,
-    };
+pub fn find_root_dir() -> Result<PathBuf> {
+    let mut path = env::current_dir().context("failed to get current dir")?;
     loop {
         path.push("Coman.toml");
         if path.exists() {
             path.pop();
-            return Some(path);
+            return Ok(path);
         }
         path.pop();
         if !path.pop() {
-            return None;
+            bail!("cannot find repository root; make sure you have a Coman.toml")
         }
     }
 }
@@ -78,17 +75,18 @@ impl Repository {
 
     /// Create a new `Repository`, reading the configuration files
     /// from the 'Coman.toml' file under the specified path.
-    pub fn read<P: Into<PathBuf>>(root: P) -> io::Result<Repository> {
+    pub fn read(root: impl Into<PathBuf>) -> Result<Repository> {
         let mut root = root.into();
         root.push("Coman.toml");
         let config = match File::open(&root) {
             Ok(mut f) => {
                 let mut s = String::new();
-                f.read_to_string(&mut s).unwrap();
-                toml::from_str::<Config>(&s).unwrap()
+                f.read_to_string(&mut s)
+                    .context("failed to read Coman.toml")?;
+                toml::from_str::<Config>(&s).context("failed to parse Coman.toml")?
             }
             Err(ref e) if e.kind() == ErrorKind::NotFound => Config::default(),
-            Err(e) => return Err(e),
+            Err(e) => return Err(e).context("failed to read Coman.toml")?,
         };
         root.pop();
         Ok(Repository::new(root, config))
@@ -137,12 +135,22 @@ impl Repository {
     /// Get a `Program` from the path to its source code. Returns
     /// `None` if the path is outside of the source directory or if it
     /// does not exist.
-    pub fn get_program<P: AsRef<Path>>(&self, path: P) -> Option<Program> {
-        let path = path.as_ref().canonicalize().ok()?;
+    pub fn get_program<P: AsRef<Path>>(&self, path: P) -> Result<Program> {
+        let path = path.as_ref();
+        let path = match path.canonicalize() {
+            Ok(p) => p,
+            Err(ref e) if e.kind() == ErrorKind::NotFound => bail!("file not found: {:?}", path),
+            Err(e) => {
+                return Err(e).with_context(|| format!("failed to canonicalize path {:?}", path));
+            }
+        };
         if !path.is_file() {
-            return None;
+            bail!("not a file: {:?}", path);
         }
-        let path = path.strip_prefix(self.source_path()).ok()?;
+        let path = path
+            .strip_prefix(self.source_path())
+            .with_context(|| format!("file is not inside repository: {:?}", path))?;
+
         let mut src = self.source_path().to_path_buf();
         src.push(&path);
         let mut test = self.test_path().to_path_buf();
@@ -153,7 +161,8 @@ impl Repository {
         build_release.push(&path);
         let mut build_debug = self.build_debug_path().to_path_buf();
         build_debug.push(&path);
-        Some(Program {
+
+        Ok(Program {
             repo: &self,
             path: path.to_path_buf(),
             src,
@@ -165,7 +174,7 @@ impl Repository {
 
     /// Get the `Program` that was most recently modified. Returns
     /// `None` if no program could be found.
-    pub fn find_recent_program(&self) -> Option<Program> {
+    pub fn find_recent_program(&self) -> Result<Program> {
         let mut best_time = SystemTime::UNIX_EPOCH;
         let mut best_prog = None;
         for ent in WalkDir::new(self.source_path()) {
@@ -182,7 +191,12 @@ impl Repository {
                 }
             }
         }
-        self.get_program(best_prog?)
+
+        if let Some(path) = best_prog {
+            self.get_program(path)
+        } else {
+            bail!("no solutions found");
+        }
     }
 }
 
@@ -248,5 +262,11 @@ impl Program<'_> {
     /// Get the language that this program is written in.
     pub fn language(&self) -> Option<&Language> {
         self.repo.config().languages.get(self.source_extension())
+    }
+}
+
+impl fmt::Display for Program<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name())
     }
 }

@@ -1,13 +1,13 @@
 use std::fs::File;
-use std::io;
 use std::io::Write;
 
+use anyhow::{Context, Result};
 use walkdir::WalkDir;
 
 use crate::Repository;
 
 /// Write a CMakeLists.txt file to the given writer.
-pub fn write_cmake_to(repo: &Repository, mut w: impl Write) -> io::Result<()> {
+pub fn write_cmake_to(repo: &Repository, mut w: impl Write) -> Result<()> {
     writeln!(w, "cmake_minimum_required(VERSION 3.9)")?;
     writeln!(
         w,
@@ -48,8 +48,9 @@ pub fn write_cmake_to(repo: &Repository, mut w: impl Write) -> io::Result<()> {
 }
 
 /// Write or update the CMakeLists.txt file.
-pub fn write_cmake(repo: &Repository) -> io::Result<()> {
+pub fn write_cmake(repo: &Repository) -> Result<()> {
     let filename = repo.root().join("CMakeLists.txt");
-    let f = File::create(filename)?;
+    let f =
+        File::create(&filename).with_context(|| format!("failed to create file {:?}", filename))?;
     write_cmake_to(repo, f)
 }
