@@ -155,8 +155,9 @@ impl Repository {
         src.push(&path);
         let mut test = self.test_path().to_path_buf();
         test.push(&path);
-        let stem = test.file_stem().unwrap().to_os_string();
-        test.set_file_name(stem);
+        while test.extension().is_some() {
+            test.set_extension("");
+        }
         let mut build_release = self.build_release_path().to_path_buf();
         build_release.push(&path);
         let mut build_debug = self.build_debug_path().to_path_buf();
