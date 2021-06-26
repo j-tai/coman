@@ -10,6 +10,7 @@ pub struct Arguments<'a> {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Subcommand<'a> {
+    Init,
     Build {
         programs: Vec<&'a str>,
         debug: bool,
@@ -48,6 +49,7 @@ pub fn parse_args<'a>(opts: &'a Options<'a, String>) -> Result<Arguments<'a>> {
     }
     let subcommand = opts.arg_str().map(|s| &s[..]).unwrap_or("r");
     res.subcommand = match subcommand {
+        "init" => Subcommand::Init,
         "build" | "b" => parse_build_args(opts)?,
         "clean" | "c" => parse_clean_args(opts)?,
         "debug" | "d" => parse_debug_args(opts)?,
