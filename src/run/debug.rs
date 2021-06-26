@@ -1,6 +1,6 @@
-use std::io;
-use std::io::{Error, ErrorKind};
 use std::process::Command;
+
+use anyhow::{bail, Result};
 
 use crate::run::eval_command_template;
 use crate::Program;
@@ -8,7 +8,7 @@ use crate::Program;
 /// Create a `Command` that can be used to run the program in a
 /// debugger specified in the configuration. Assumes that the
 /// program has already been compiled.
-pub fn get_debug_command(prog: &Program) -> io::Result<Command> {
+pub fn get_debug_command(prog: &Program) -> Result<Command> {
     let ext = prog.source_extension();
     if let Some(lang) = prog.language() {
         let debug = &lang.debug;
@@ -16,10 +16,7 @@ pub fn get_debug_command(prog: &Program) -> io::Result<Command> {
             return Ok(eval_command_template(prog, debug, true));
         }
     }
-    Err(Error::new(
-        ErrorKind::InvalidInput,
-        format!("no debugger specified for file extension '{}'", ext),
-    ))
+    bail!("no debugger specified for file extension {:?}", ext);
 }
 
 /// Debug the program. The specified debugging program in the
@@ -27,7 +24,7 @@ pub fn get_debug_command(prog: &Program) -> io::Result<Command> {
 /// put into an interactive debugger like GDB. Returns true if the
 /// debugger exited with success, or false otherwise. This assumes
 /// that the program has already been compiled in debug mode.
-pub fn debug(prog: &Program) -> io::Result<bool> {
+pub fn debug(prog: &Program) -> Result<bool> {
     let mut cmd = get_debug_command(prog)?;
     let stat = cmd.status()?;
     Ok(stat.success())

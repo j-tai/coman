@@ -3,6 +3,8 @@ use std::fs;
 use std::path::Path;
 use std::process;
 
+use anyhow::{Context, Result};
+use args::Arguments;
 use getargs::Options;
 
 use crate::args::Subcommand;
@@ -28,34 +30,18 @@ macro_rules! stepln {
     }};
 }
 
-fn get_program<'a>(repo: &'a Repository, program: Option<&str>) -> Program<'a> {
+fn get_program<'a>(repo: &'a Repository, program: Option<&str>) -> Result<Program<'a>> {
     if let Some(name) = program {
-        if let Some(prgm) = repo.get_program(name) {
-            prgm
-        } else {
-            eprintln!("coman: {}: not found or outside repository", name);
-            process::exit(2);
-        }
+        repo.get_program(name)
     } else {
-        if let Some(prgm) = repo.find_recent_program() {
-            prgm
-        } else {
-            eprintln!("coman: no solutions found");
-            process::exit(2);
-        }
+        repo.find_recent_program()
     }
 }
 
-fn do_build(program: &Program, debug: bool, output: Option<&str>) -> i32 {
+fn do_build(program: &Program, debug: bool, output: Option<&str>) -> Result<()> {
     stepln!("COMPILE", "{}", program.name());
-    let result = match run::compile(program, debug) {
-        Ok(true) => 0,
-        Ok(false) => 2,
-        Err(e) => {
-            eprintln!("coman: compilation failed: {}", e);
-            3
-        }
-    };
+    run::compile(program, debug).context("compilation failed")?;
+
     if let Some(output) = output {
         let from = if debug {
             program.build_debug_path()
@@ -63,57 +49,132 @@ fn do_build(program: &Program, debug: bool, output: Option<&str>) -> i32 {
             program.build_release_path()
         };
         let to = Path::new(output);
-        if let Err(e) = fs::create_dir_all(to.parent().unwrap()) {
-            eprintln!("coman: failed to create parent dirs of {:?}: {}", to, e);
-            return 3;
-        }
-        if let Err(e) = fs::copy(from, to) {
-            eprintln!("coman: failed to copy {:?} to {:?}: {}", from, to, e);
-            return 3;
-        }
+        let parent = to.parent().unwrap();
+
+        fs::create_dir_all(parent).with_context(|| format!("failed to create dir {:?}", parent))?;
+        fs::copy(from, to).with_context(|| format!("failed to copy {:?} to {:?}", from, to))?;
     }
-    result
+
+    Ok(())
 }
 
-fn do_test(prog: &Program, case: &str) -> bool {
+fn do_test(prog: &Program, case: &str) -> Result<bool> {
     step!("TEST", "{}: ", case);
-    let result = run::test(prog, case);
-    match result {
-        Ok(result) => {
-            match result.status {
-                TestStatus::Pass => eprint!("\x1b[1;32mpass\x1b[m"),
-                TestStatus::Wrong => eprint!("\x1b[1;31mwrong\x1b[m"),
-                TestStatus::Crash => eprint!("\x1b[1;31mcrash\x1b[m"),
-                TestStatus::Timeout => eprint!("\x1b[1;33mtimeout\x1b[m"),
-            }
-            if result.timeout && result.status != TestStatus::Timeout {
-                eprint!("-\x1b[1;33mtimeout\x1b[m");
-            }
-            eprint!(" ");
+    let result = run::test(prog, case)
+        .with_context(|| format!("failed to run test case {:?} on program {}", case, prog))?;
 
-            let seconds = result.time.as_secs();
-            let millis = result.time.subsec_millis();
-            let micros = result.time.subsec_micros() % 1000;
-            if seconds >= 100 {
-                eprintln!("{} s", seconds);
-            } else if seconds >= 10 {
-                eprintln!("{}.{} s", seconds, millis / 100);
-            } else if seconds >= 1 {
-                eprintln!("{}.{:02} s", seconds, millis / 10);
-            } else if millis >= 100 {
-                eprintln!("{} ms", millis);
-            } else if millis >= 10 {
-                eprintln!("{}.{} ms", millis, micros / 100);
-            } else if millis >= 1 {
-                eprintln!("{}.{:02} ms", millis, micros / 10);
+    match result.status {
+        TestStatus::Pass => eprint!("\x1b[1;32mpass\x1b[m"),
+        TestStatus::Wrong => eprint!("\x1b[1;31mwrong\x1b[m"),
+        TestStatus::Crash => eprint!("\x1b[1;31mcrash\x1b[m"),
+        TestStatus::Timeout => eprint!("\x1b[1;33mtimeout\x1b[m"),
+    }
+    if result.timeout && result.status != TestStatus::Timeout {
+        eprint!("-\x1b[1;33mtimeout\x1b[m");
+    }
+    eprint!(" ");
+
+    let seconds = result.time.as_secs();
+    let millis = result.time.subsec_millis();
+    let micros = result.time.subsec_micros() % 1000;
+    if seconds >= 100 {
+        eprintln!("{} s", seconds);
+    } else if seconds >= 10 {
+        eprintln!("{}.{} s", seconds, millis / 100);
+    } else if seconds >= 1 {
+        eprintln!("{}.{:02} s", seconds, millis / 10);
+    } else if millis >= 100 {
+        eprintln!("{} ms", millis);
+    } else if millis >= 10 {
+        eprintln!("{}.{} ms", millis, micros / 100);
+    } else if millis >= 1 {
+        eprintln!("{}.{:02} ms", millis, micros / 10);
+    } else {
+        eprintln!("0.{:03} ms", micros);
+    }
+    Ok(result.status == TestStatus::Pass && !result.timeout)
+}
+
+fn try_main(args: Arguments) -> Result<bool> {
+    let root = find_root_dir()?;
+    let repo = Repository::read(root)?;
+
+    match args.subcommand {
+        Subcommand::Build {
+            programs,
+            debug,
+            output,
+        } => {
+            if programs.is_empty() {
+                let prog = get_program(&repo, None)?;
+                do_build(&prog, debug, output)?;
             } else {
-                eprintln!("0.{:03} ms", micros);
+                for prog in programs {
+                    let program = get_program(&repo, Some(prog))?;
+                    do_build(&program, debug, output)?;
+                }
             }
-            result.status == TestStatus::Pass && !result.timeout
+            Ok(true)
         }
-        Err(e) => {
-            eprintln!("{}", e);
-            false
+
+        Subcommand::Run { program } => {
+            let prog = get_program(&repo, program)?;
+            do_build(&prog, false, None)?;
+
+            stepln!("RUN", "{}", prog.name());
+            run::run(&prog).with_context(|| format!("failed to run program {}", prog))
+        }
+
+        Subcommand::Test { program, tests } => {
+            let program = get_program(&repo, program)?;
+            do_build(&program, false, None)?;
+
+            let mut result = true;
+            if tests.is_empty() {
+                // Testing all cases
+                let mut cases = run::get_test_cases(&program)?;
+                cases.sort_unstable();
+                for case in &cases {
+                    if !do_test(&program, case)? {
+                        result = false;
+                    }
+                }
+            } else {
+                for case in tests {
+                    if !do_test(&program, case)? {
+                        result = false;
+                    }
+                }
+            }
+            Ok(result)
+        }
+
+        Subcommand::Debug { program } => {
+            let program = get_program(&repo, program)?;
+            do_build(&program, true, None)?;
+
+            stepln!("DEBUG", "{}", program.name());
+            run::debug(&program).with_context(|| format!("failed to debug program {}", program))
+        }
+
+        Subcommand::Clean { program, all } => {
+            if all {
+                stepln!("CLEAN", "all binaries");
+                run::clean_all(&repo).context("failed to clean all binaries")?;
+            } else {
+                let program = get_program(&repo, program)?;
+                stepln!("CLEAN", "{}", program.name());
+                run::clean(&program)
+                    .with_context(|| format!("failed to clean binary for {}", program))?;
+            }
+            Ok(true)
+        }
+
+        Subcommand::CMake => {
+            stepln!("GENERATE", "CMakeLists.txt");
+            run::write_cmake(&repo)
+                .with_context(|| format!("failed to generate CMakeLists.txt"))?;
+            Ok(true)
         }
     }
 }
@@ -159,133 +220,14 @@ Commands:
         return;
     }
 
-    let root = match find_root_dir() {
-        Some(d) => d,
-        None => {
-            eprintln!("coman: cannot find repository root; make sure you have a Coman.toml");
-            process::exit(3);
-        }
-    };
-    let repo = match Repository::read(root) {
-        Ok(r) => r,
+    let result = try_main(args);
+
+    match result {
+        Ok(true) => return,
+        Ok(false) => process::exit(1),
         Err(e) => {
-            eprintln!("coman: cannot open repository: {}", e);
-            process::exit(3);
-        }
-    };
-
-    let mut exit_code = 0;
-
-    match args.subcommand {
-        Subcommand::Build {
-            programs,
-            debug,
-            output,
-        } => {
-            if programs.is_empty() {
-                let program = get_program(&repo, None);
-                exit_code = exit_code.max(do_build(&program, debug, output));
-            } else {
-                for program in programs {
-                    let program = get_program(&repo, Some(program));
-                    exit_code = exit_code.max(do_build(&program, debug, output));
-                }
-            }
-        }
-
-        Subcommand::Run { program } => {
-            let program = get_program(&repo, program);
-            exit_code = do_build(&program, false, None);
-            if exit_code != 0 {
-                process::exit(exit_code);
-            }
-
-            stepln!("RUN", "{}", program.name());
-            exit_code = match run::run(&program) {
-                Ok(true) => 0,
-                Ok(false) => 1,
-                Err(e) => {
-                    eprintln!("coman: running program failed: {}", e);
-                    2
-                }
-            };
-        }
-
-        Subcommand::Test { program, tests } => {
-            let program = get_program(&repo, program);
-            exit_code = do_build(&program, false, None);
-            if exit_code != 0 {
-                process::exit(exit_code);
-            }
-
-            if tests.is_empty() {
-                // Testing all cases
-                let mut cases = run::get_test_cases(&program);
-                cases.sort_unstable();
-                for case in &cases {
-                    if !do_test(&program, case) {
-                        exit_code = 1;
-                    }
-                }
-            } else {
-                for case in tests {
-                    if !do_test(&program, case) {
-                        exit_code = 1;
-                    }
-                }
-            }
-        }
-
-        Subcommand::Debug { program } => {
-            let program = get_program(&repo, program);
-            exit_code = do_build(&program, true, None);
-            if exit_code != 0 {
-                process::exit(exit_code);
-            }
-
-            stepln!("DEBUG", "{}", program.name());
-            exit_code = match run::debug(&program) {
-                Ok(true) => 0,
-                Ok(false) => 1,
-                Err(e) => {
-                    eprintln!("coman: debugging program failed: {}", e);
-                    2
-                }
-            }
-        }
-
-        Subcommand::Clean { program, all } => {
-            if all {
-                stepln!("CLEAN", "all binaries");
-                exit_code = match run::clean_all(&repo) {
-                    Ok(()) => 0,
-                    Err(e) => {
-                        eprintln!("coman: cleaning all binaries failed: {}", e);
-                        2
-                    }
-                }
-            } else {
-                let program = get_program(&repo, program);
-                stepln!("CLEAN", "{}", program.name());
-                exit_code = match run::clean(&program) {
-                    Ok(()) => 0,
-                    Err(e) => {
-                        eprintln!("coman: cleaning program failed: {}", e);
-                        2
-                    }
-                }
-            }
-        }
-
-        Subcommand::CMake => {
-            stepln!("GENERATE", "CMakeLists.txt");
-            let result = run::write_cmake(&repo);
-            if let Err(e) = result {
-                eprintln!("coman: cannot create CMakeLists.txt: {}", e);
-                exit_code = 2;
-            }
+            eprintln!("coman: {:?}", e);
+            process::exit(2);
         }
     }
-
-    process::exit(exit_code);
 }
