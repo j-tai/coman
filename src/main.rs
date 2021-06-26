@@ -133,7 +133,7 @@ fn try_main(args: Arguments) -> Result<bool> {
             if tests.is_empty() {
                 // Testing all cases
                 let mut cases = run::get_test_cases(&program)?;
-                cases.sort_unstable();
+                alphanumeric_sort::sort_str_slice(&mut cases);
                 for case in &cases {
                     if !do_test(&program, case)? {
                         result = false;
