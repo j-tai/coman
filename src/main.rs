@@ -61,15 +61,19 @@ fn do_test(prog: &Program, case: &str) -> Result<bool> {
 }
 
 fn try_main(args: Arguments) -> Result<bool> {
+    // init is the only command that doesn't require an existing repository
+    if args.subcommand == Subcommand::Init {
+        stepln!("INIT", "coman repository");
+        run::init()?;
+        return Ok(true);
+    }
+
+    // For all other commands, load the repository:
     let root = find_root_dir()?;
     let repo = Repository::read(root)?;
 
     match args.subcommand {
-        Subcommand::Init => {
-            stepln!("INIT", "coman repository");
-            run::init()?;
-            Ok(true)
-        }
+        Subcommand::Init => unreachable!(),
 
         Subcommand::Build {
             programs,
