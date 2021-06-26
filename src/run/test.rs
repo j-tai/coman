@@ -1,12 +1,12 @@
 use std::fs::{self, File};
 use std::io::{self, ErrorKind, Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use xz2::read::XzDecoder;
 
 use crate::run::get_run_command;
@@ -45,30 +45,37 @@ pub fn open_test_files_for_case(
     prog: &Program,
     case: &str,
 ) -> Result<(Box<dyn Read + Send>, Box<dyn Read + Send>)> {
-    fn try_open(path: impl AsRef<Path>) -> Result<File> {
+    fn try_open(path: impl AsRef<Path>) -> Result<Option<File>> {
         let path = path.as_ref();
-        File::open(path).with_context(|| format!("failed to read file {:?}", path))
+        match File::open(path) {
+            Ok(f) => Ok(Some(f)),
+            Err(ref e) if e.kind() == ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e).with_context(|| format!("failed to read file {:?}", path)),
+        }
+    }
+
+    fn open_test_file(mut path: PathBuf) -> Result<Box<dyn Read + Send>> {
+        if let Some(file) = try_open(&path)? {
+            Ok(Box::new(XzDecoder::new(file)))
+        } else {
+            path.set_extension("");
+            if let Some(file) = try_open(&path)? {
+                Ok(Box::new(file))
+            } else {
+                bail!("file not found: {:?}", path);
+            }
+        }
     }
 
     let test_path = prog.test_path();
 
     let mut in_path = test_path.to_path_buf();
-    in_path.push(format!("{}.in", case));
-    let in_file: Box<dyn Read + Send> = if in_path.is_file() {
-        Box::new(try_open(in_path)?)
-    } else {
-        in_path.set_extension("in.xz");
-        Box::new(XzDecoder::new(try_open(in_path)?))
-    };
+    in_path.push(format!("{}.in.xz", case));
+    let in_file = open_test_file(in_path)?;
 
     let mut out_path = test_path.to_path_buf();
-    out_path.push(format!("{}.out", case));
-    let out_file: Box<dyn Read + Send> = if out_path.is_file() {
-        Box::new(try_open(out_path)?)
-    } else {
-        out_path.set_extension("out.xz");
-        Box::new(XzDecoder::new(try_open(out_path)?))
-    };
+    out_path.push(format!("{}.out.xz", case));
+    let out_file = open_test_file(out_path)?;
 
     Ok((in_file, out_file))
 }
