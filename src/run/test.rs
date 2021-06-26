@@ -94,7 +94,7 @@ pub fn test(prog: &Program, case: &str) -> Result<TestResult> {
     let mut cmd = get_run_command(prog);
     cmd.stdin(Stdio::piped());
     cmd.stdout(Stdio::piped());
-    cmd.stderr(Stdio::null());
+    cmd.stderr(Stdio::piped());
     let begin = Instant::now();
     let mut child = cmd
         .spawn()
@@ -120,6 +120,14 @@ pub fn test(prog: &Program, case: &str) -> Result<TestResult> {
         stdout.read_to_end(&mut act_output)?;
         send.send(act_output).unwrap();
         Ok(())
+    });
+
+    // Capture the data from stderr
+    let mut stderr = child.stderr.take().unwrap();
+    let err_thread: JoinHandle<io::Result<Vec<u8>>> = thread::spawn(move || {
+        let mut buf = vec![];
+        stderr.read_to_end(&mut buf)?;
+        Ok(buf)
     });
 
     // Get the result with the hard timeout
@@ -166,10 +174,16 @@ pub fn test(prog: &Program, case: &str) -> Result<TestResult> {
         .unwrap()
         .context("error in stdout capturing thread")?;
 
+    let stderr = err_thread
+        .join()
+        .unwrap()
+        .context("error in stdout capturing thread")?;
+
     Ok(TestResult {
         status,
         time: dur,
         timeout,
+        stderr,
     })
 }
 
@@ -179,6 +193,7 @@ pub struct TestResult {
     pub status: TestStatus,
     pub time: Duration,
     pub timeout: bool,
+    pub stderr: Vec<u8>,
 }
 
 /// Result type of the test.

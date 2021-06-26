@@ -58,6 +58,26 @@ fn do_build(program: &Program, debug: bool, output: Option<&str>) -> Result<()> 
     Ok(())
 }
 
+fn print_n_lines(header: &str, data: &[u8], n: usize) {
+    let string = String::from_utf8_lossy(data);
+    let total_lines = string.lines().count();
+    if total_lines == 0 {
+        return;
+    } else {
+        eprintln!("--- {} ---", header);
+    }
+
+    if total_lines <= n {
+        string.lines().for_each(|line| eprintln!("{}", line));
+    } else {
+        string
+            .lines()
+            .take(n - 1)
+            .for_each(|line| eprintln!("{}", line));
+        eprintln!("... {} more lines", total_lines - (n - 1));
+    }
+}
+
 fn do_test(prog: &Program, case: &str) -> Result<bool> {
     step!("TEST", "{}: ", case);
     let result = run::test(prog, case)
@@ -92,7 +112,11 @@ fn do_test(prog: &Program, case: &str) -> Result<bool> {
     } else {
         eprintln!("0.{:03} ms", micros);
     }
-    Ok(result.status == TestStatus::Pass && !result.timeout)
+    let passed = result.status == TestStatus::Pass && !result.timeout;
+    if !passed {
+        print_n_lines("captured stderr", &result.stderr, 12);
+    }
+    Ok(passed)
 }
 
 fn try_main(args: Arguments) -> Result<bool> {
