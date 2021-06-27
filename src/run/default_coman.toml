@@ -1,6 +1,9 @@
 # coman configuration file
 # Documentation: https://github.com/j-tai/coman/wiki/Configuration-reference
 
+soft_timeout = 2000
+hard_timeout = 5000
+
 [languages.c]
 compile = ["gcc", "-Wall", "-Wextra", "-pedantic", "-lm", "-O3", "-DCOMAN", "-o", "{build}", "{source}"]
 compile_debug = ["gcc", "-Wall", "-Wextra", "-pedantic", "-lm", "-g", "-DCOMAN", "-o", "{build}", "{source}"]
