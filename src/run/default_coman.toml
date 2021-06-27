@@ -23,5 +23,8 @@ compile = ["rustc", "-O", "-o", "{build}", "{source}"]
 compile_debug = ["rustc", "-o", "{build}", "{source}"]
 debug = ["gdb", "-tui", "{build}"]
 
+[languages.sh]
+run = ["bash", "{build}"]
+
 [languages.swift]
 compile = ["swiftc", "-O", "-o", "{build}", "{source}"]
