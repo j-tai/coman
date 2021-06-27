@@ -11,6 +11,10 @@ compile = ["g++", "-std=c++14", "-Wall", "-Wextra", "-pedantic", "-lm", "-O3", "
 compile_debug = ["g++", "-std=c++14", "-Wall", "-Wextra", "-pedantic", "-lm", "-g", "-DCOMAN", "-fsanitize=undefined", "-o", "{build}", "{source}"]
 debug = ["gdb", "-q", "-tui", "{build}"]
 
+[languages.java]
+compile = ["sh", "-c", 'mkdir -p "$1" && cp "$2" "$1"/Main.java && cd "$1" && exec javac Main.java', "", "{build}", "{source}"]
+run = ["sh", "-c", 'cd "$1" && exec java Main', "", "{build}"]
+
 [languages.py]
 run = ["python3", "{build}"]
 
