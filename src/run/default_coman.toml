@@ -12,6 +12,8 @@ compile_debug = ["g++", "-std=c++14", "-Wall", "-Wextra", "-pedantic", "-lm", "-
 debug = ["gdb", "-q", "-tui", "{build}"]
 
 [languages.java]
+# Note: for Java, the class should be named Main and it should NOT be in any
+# package.
 compile = ["sh", "-c", 'mkdir -p "$1" && cp "$2" "$1"/Main.java && cd "$1" && exec javac Main.java', "", "{build}", "{source}"]
 run = ["sh", "-c", 'cd "$1" && exec java Main', "", "{build}"]
 
