@@ -3,7 +3,7 @@ use std::fs;
 use std::path::Path;
 use std::process;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use args::Arguments;
 use getargs::Options;
 
@@ -108,10 +108,15 @@ fn try_main(args: Arguments) -> Result<bool> {
             if tests.is_empty() {
                 // Testing all cases
                 let mut cases = run::get_test_cases(&program)?;
-                alphanumeric_sort::sort_str_slice(&mut cases);
-                for case in &cases {
-                    if !do_test(&program, case)? {
-                        result = false;
+                if cases.is_empty() {
+                    // No cases found
+                    bail!("no test cases found in {:?}", program.test_path());
+                } else {
+                    alphanumeric_sort::sort_str_slice(&mut cases);
+                    for case in &cases {
+                        if !do_test(&program, case)? {
+                            result = false;
+                        }
                     }
                 }
             } else {
