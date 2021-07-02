@@ -178,15 +178,13 @@ impl Repository {
     pub fn find_recent_program(&self) -> Result<Program> {
         let mut best_time = SystemTime::UNIX_EPOCH;
         let mut best_prog = None;
-        for ent in WalkDir::new(self.source_path()) {
-            if let Ok(ent) = ent {
-                if ent.file_type().is_file() {
-                    if let Ok(meta) = ent.metadata() {
-                        if let Ok(modified) = meta.modified() {
-                            if modified > best_time {
-                                best_time = modified;
-                                best_prog = Some(ent.into_path());
-                            }
+        for ent in WalkDir::new(self.source_path()).into_iter().flatten() {
+            if ent.file_type().is_file() {
+                if let Ok(meta) = ent.metadata() {
+                    if let Ok(modified) = meta.modified() {
+                        if modified > best_time {
+                            best_time = modified;
+                            best_prog = Some(ent.into_path());
                         }
                     }
                 }
