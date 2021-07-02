@@ -3,7 +3,7 @@ use std::io::{ErrorKind, Write};
 
 use anyhow::{Context, Result};
 
-const DEFAULT_COMAN_TOML: &'static str = include_str!("default_coman.toml");
+const DEFAULT_COMAN_TOML: &str = include_str!("default_coman.toml");
 
 pub fn init() -> Result<()> {
     // Create Coman.toml

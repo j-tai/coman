@@ -152,8 +152,7 @@ fn try_main(args: Arguments) -> Result<bool> {
 
         Subcommand::CMake => {
             stepln!("GENERATE", "CMakeLists.txt");
-            run::write_cmake(&repo)
-                .with_context(|| format!("failed to generate CMakeLists.txt"))?;
+            run::write_cmake(&repo).context("failed to generate CMakeLists.txt")?;
             Ok(true)
         }
     }
@@ -204,7 +203,7 @@ Commands:
     let result = try_main(args);
 
     match result {
-        Ok(true) => return,
+        Ok(true) => {}
         Ok(false) => process::exit(1),
         Err(e) => {
             eprintln!("coman: {:?}", e);
