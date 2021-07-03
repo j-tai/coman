@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 
 use crate::Program;
 
-use super::eval_command_template;
+use super::{eval_command_template, RunResult};
 
 /// Create a `Command` that can be used to run the
 /// program. Assumes that the program has already been compiled.
@@ -21,10 +21,10 @@ pub fn get_run_command(prog: &Program) -> Command {
 /// Run the program in release mode. Returns true if the program
 /// exited with success, otherwise returns false. The program's
 /// stdin, stdout, and stderr are all inherited.
-pub fn run(prog: &Program) -> Result<bool> {
+pub fn run(prog: &Program) -> Result<RunResult> {
     let mut cmd = get_run_command(prog);
     let stat = cmd
         .status()
         .with_context(|| format!("failed to run command {:?}", cmd))?;
-    Ok(stat.success())
+    Ok(stat.into())
 }

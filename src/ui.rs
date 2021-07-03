@@ -1,4 +1,4 @@
-use crate::run::{TestResult, TestStatus};
+use crate::run::{RunResult, TestResult, TestStatus};
 
 mod step;
 
@@ -22,11 +22,17 @@ pub fn print_n_lines(header: &str, data: &[u8], n: usize) {
     }
 }
 
+pub fn print_run_result(result: &RunResult) {
+    if !result.is_success() {
+        println!("coman: process completed with {}", result);
+    }
+}
+
 pub fn print_test_result(result: &TestResult) {
     match result.status {
         TestStatus::Pass => eprint!("\x1b[1;32mpass\x1b[m"),
         TestStatus::Wrong => eprint!("\x1b[1;31mwrong\x1b[m"),
-        TestStatus::Crash => eprint!("\x1b[1;31mcrash\x1b[m"),
+        TestStatus::Crash(_) => eprint!("\x1b[1;31mcrash\x1b[m"),
         TestStatus::Timeout => eprint!("\x1b[1;33mtimeout\x1b[m"),
     }
     if result.timeout && result.status != TestStatus::Timeout {
