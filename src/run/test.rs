@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Context, Result};
 use xz2::read::XzDecoder;
 
-use crate::run::get_run_command;
+use crate::run::{get_run_command, RunResult};
 use crate::Program;
 
 /// Get a list of the test cases. If the list of test cases cannot
@@ -148,8 +148,9 @@ pub fn test(prog: &Program, case: &str) -> Result<TestResult> {
             out_file
                 .read_to_end(&mut exp_output)
                 .context("failed to read output file")?;
-            if !child.wait()?.success() {
-                TestStatus::Crash
+            let run_status: RunResult = child.wait()?.into();
+            if !run_status.is_success() {
+                TestStatus::Crash(run_status)
             } else if act_output == exp_output {
                 TestStatus::Pass
             } else {
@@ -197,10 +198,10 @@ pub struct TestResult {
 }
 
 /// Result type of the test.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TestStatus {
     Pass,
     Wrong,
-    Crash,
+    Crash(RunResult),
     Timeout,
 }

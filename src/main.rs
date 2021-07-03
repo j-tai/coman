@@ -57,6 +57,9 @@ fn do_test(prog: &Program, case: &str) -> Result<bool> {
     if !passed {
         ui::print_n_lines("captured stderr", &result.stderr, 12);
     }
+    if let TestStatus::Crash(run_result) = &result.status {
+        ui::print_run_result(run_result);
+    }
     Ok(passed)
 }
 
@@ -97,7 +100,10 @@ fn try_main(args: Arguments) -> Result<bool> {
             do_build(&prog, false, None)?;
 
             stepln!("RUN", "{}", prog.name());
-            run::run(&prog).with_context(|| format!("failed to run program {}", prog))
+            let result =
+                run::run(&prog).with_context(|| format!("failed to run program {}", prog))?;
+            ui::print_run_result(&result);
+            Ok(result.is_success())
         }
 
         Subcommand::Test { program, tests } => {
@@ -134,7 +140,10 @@ fn try_main(args: Arguments) -> Result<bool> {
             do_build(&program, true, None)?;
 
             stepln!("DEBUG", "{}", program.name());
-            run::debug(&program).with_context(|| format!("failed to debug program {}", program))
+            let result = run::debug(&program)
+                .with_context(|| format!("failed to debug program {}", program))?;
+            ui::print_run_result(&result);
+            Ok(result.is_success())
         }
 
         Subcommand::Clean { program, all } => {
