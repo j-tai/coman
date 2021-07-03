@@ -10,7 +10,6 @@ use getargs::Options;
 use crate::args::Subcommand;
 pub use crate::config::*;
 pub use crate::repo::*;
-use crate::run::TestStatus;
 
 mod args;
 pub mod config;
@@ -47,20 +46,11 @@ fn do_build(program: &Program, debug: bool, output: Option<&str>) -> Result<()> 
 }
 
 fn do_test(prog: &Program, case: &str) -> Result<bool> {
-    step!("TEST", "{}: ", case);
+    ui::print_test_case(case);
     let result = run::test(prog, case)
         .with_context(|| format!("failed to run test case {:?} on program {}", case, prog))?;
-
     ui::print_test_result(&result);
-
-    let passed = result.status == TestStatus::Pass && !result.timeout;
-    if !passed {
-        ui::print_n_lines("captured stderr", &result.stderr, 12);
-    }
-    if let TestStatus::Crash(run_result) = &result.status {
-        ui::print_run_result(run_result);
-    }
-    Ok(passed)
+    Ok(result.passed())
 }
 
 fn try_main(args: Arguments) -> Result<bool> {

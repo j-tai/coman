@@ -197,6 +197,12 @@ pub struct TestResult {
     pub stderr: Vec<u8>,
 }
 
+impl TestResult {
+    pub fn passed(&self) -> bool {
+        self.status == TestStatus::Pass && !self.timeout
+    }
+}
+
 /// Result type of the test.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TestStatus {
