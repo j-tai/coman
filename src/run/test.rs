@@ -1,5 +1,5 @@
 use std::fs::{self, File};
-use std::io::{self, ErrorKind, Read, Write};
+use std::io::{self, Cursor, ErrorKind, Read};
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::mpsc;
@@ -63,22 +63,30 @@ fn open_optional_test_file(
     // Try the xz-compressed one
     let mut path = prog.test_path().join(format!("{case}.{extension}.xz"));
 
-    if let Some(file) = try_open(&path)? {
-        Ok(Some(Box::new(XzDecoder::new(file))))
+    let mut reader: Box<dyn Read + Send> = if let Some(file) = try_open(&path)? {
+        Box::new(XzDecoder::new(file))
     } else {
         path.set_extension("");
         if let Some(file) = try_open(&path)? {
-            Ok(Some(Box::new(file)))
+            Box::new(file)
         } else {
-            bail!("file not found: {:?}", path);
+            return Ok(None);
         }
+    };
+
+    if prog.repository().config().buffering {
+        let mut bytes = vec![];
+        reader.read_to_end(&mut bytes)?;
+        Ok(Some(Box::new(Cursor::new(bytes))))
+    } else {
+        Ok(Some(reader))
     }
 }
 
 fn open_test_file(prog: &Program, case: &str, extension: &str) -> Result<Box<dyn Read + Send>> {
     match open_optional_test_file(prog, case, extension)? {
         Some(f) => Ok(f),
-        None => bail!("could not find '{case}.{extension}' file for {prog}"),
+        None => bail!("could not find '{}.{}' file for {}", case, extension, prog),
     }
 }
 
@@ -111,10 +119,6 @@ pub fn test(prog: &Program, case: &str) -> Result<TestResult> {
         mut in_file,
         mut out_file,
     } = load_test_data_for_case(prog, case)?;
-    let mut input = vec![];
-    in_file
-        .read_to_end(&mut input)
-        .context("failed to read test input file")?;
 
     // Start the program
     let mut cmd = get_run_command(prog);
@@ -129,9 +133,9 @@ pub fn test(prog: &Program, case: &str) -> Result<TestResult> {
 
     // Feed input file into stdin
     let mut stdin = child.stdin.take().unwrap();
-    let in_thread = thread::spawn(move || match stdin.write_all(&input) {
+    let in_thread = thread::spawn(move || match io::copy(&mut in_file, &mut stdin) {
         // This thread copies the input data to the process's stdin.
-        Ok(()) => Ok(()),
+        Ok(_) => Ok(()),
         Err(ref e) if e.kind() == ErrorKind::BrokenPipe => Ok(()),
         Err(e) => Err(e),
     });

@@ -10,6 +10,7 @@ pub struct Config {
     pub build_dir: String,
     pub soft_timeout: u64,
     pub hard_timeout: u64,
+    pub buffering: bool,
     pub languages: HashMap<String, Language>,
 }
 
@@ -21,6 +22,7 @@ impl Default for Config {
             build_dir: "build".to_string(),
             soft_timeout: 2000,
             hard_timeout: 5000,
+            buffering: false,
             languages: Default::default(),
         }
     }

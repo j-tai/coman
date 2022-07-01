@@ -1,8 +1,13 @@
 # coman configuration file
-# Documentation: https://github.com/j-tai/coman/wiki/Configuration-reference
 
+# Time in milliseconds before the test result is marked as timeout.
 soft_timeout = 2000
+# Time in milliseconds before the program is terminated during a test.
 hard_timeout = 5000
+# Whether to read in the entire *.in or *.out file before starting the test.
+# This way, the time spent reading the files (and decompressing them, for
+# compressed files) is not counted. Enabling this may increase memory usage.
+buffering = false
 
 [languages.c]
 compile = ["gcc", "-Wall", "-Wextra", "-pedantic", "-lm", "-O3", "-DCOMAN", "-o", "{build}", "{source}"]
