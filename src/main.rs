@@ -85,13 +85,13 @@ fn try_main(args: Arguments) -> Result<bool> {
             Ok(true)
         }
 
-        Subcommand::Run { program } => {
+        Subcommand::Run { program, args } => {
             let prog = get_program(&repo, program)?;
             do_build(&prog, false, None)?;
 
             stepln!("RUN", "{}", prog.name());
-            let result =
-                run::run(&prog).with_context(|| format!("failed to run program {}", prog))?;
+            let result = run::run(&prog, &args)
+                .with_context(|| format!("failed to run program {}", prog))?;
             ui::print_run_result(&result);
             Ok(result.is_success())
         }

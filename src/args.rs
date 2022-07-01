@@ -18,6 +18,7 @@ pub enum Subcommand<'a> {
     },
     Run {
         program: Option<&'a str>,
+        args: Vec<&'a str>,
     },
     Test {
         program: Option<&'a str>,
@@ -38,7 +39,10 @@ pub fn parse_args<'a>(opts: &'a Options<'a, String>) -> Result<Arguments<'a>> {
         bad_usage: false,
         show_help: false,
         show_version: false,
-        subcommand: Subcommand::Run { program: None },
+        subcommand: Subcommand::Run {
+            program: None,
+            args: vec![],
+        },
     };
     while let Some(opt) = opts.next() {
         match opt? {
@@ -100,9 +104,9 @@ fn parse_debug_args<'a>(opts: &'a Options<'a, String>) -> Result<Subcommand<'a>>
 }
 
 fn parse_run_args<'a>(opts: &'a Options<'a, String>) -> Result<Subcommand<'a>> {
-    Ok(Subcommand::Run {
-        program: opts.arg_str().map(|s| &s[..]),
-    })
+    let program = opts.arg_str().map(|s| &s[..]);
+    let args = opts.args().iter().map(|s| &s[..]).collect();
+    Ok(Subcommand::Run { program, args })
 }
 
 fn parse_test_args<'a>(opts: &'a Options<'a, String>) -> Result<Subcommand<'a>> {

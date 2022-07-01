@@ -1,6 +1,6 @@
 use std::fs::{self, File};
 use std::io::{self, ErrorKind, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Stdio;
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
@@ -40,11 +40,17 @@ pub fn get_test_cases(prog: &Program) -> Result<Vec<String>> {
     Ok(v)
 }
 
-/// Open the input and output files for the test case.
-pub fn open_test_files_for_case(
+struct TestData {
+    args: Vec<String>,
+    in_file: Box<dyn Send + Read>,
+    out_file: Box<dyn Send + Read>,
+}
+
+fn open_optional_test_file(
     prog: &Program,
     case: &str,
-) -> Result<(Box<dyn Read + Send>, Box<dyn Read + Send>)> {
+    extension: &str,
+) -> Result<Option<Box<dyn Read + Send>>> {
     fn try_open(path: impl AsRef<Path>) -> Result<Option<File>> {
         let path = path.as_ref();
         match File::open(path) {
@@ -54,37 +60,57 @@ pub fn open_test_files_for_case(
         }
     }
 
-    fn open_test_file(mut path: PathBuf) -> Result<Box<dyn Read + Send>> {
+    // Try the xz-compressed one
+    let mut path = prog.test_path().join(format!("{case}.{extension}.xz"));
+
+    if let Some(file) = try_open(&path)? {
+        Ok(Some(Box::new(XzDecoder::new(file))))
+    } else {
+        path.set_extension("");
         if let Some(file) = try_open(&path)? {
-            Ok(Box::new(XzDecoder::new(file)))
+            Ok(Some(Box::new(file)))
         } else {
-            path.set_extension("");
-            if let Some(file) = try_open(&path)? {
-                Ok(Box::new(file))
-            } else {
-                bail!("file not found: {:?}", path);
-            }
+            bail!("file not found: {:?}", path);
         }
     }
+}
 
-    let test_path = prog.test_path();
+fn open_test_file(prog: &Program, case: &str, extension: &str) -> Result<Box<dyn Read + Send>> {
+    match open_optional_test_file(prog, case, extension)? {
+        Some(f) => Ok(f),
+        None => bail!("could not find '{case}.{extension}' file for {prog}"),
+    }
+}
 
-    let mut in_path = test_path.to_path_buf();
-    in_path.push(format!("{}.in.xz", case));
-    let in_file = open_test_file(in_path)?;
-
-    let mut out_path = test_path.to_path_buf();
-    out_path.push(format!("{}.out.xz", case));
-    let out_file = open_test_file(out_path)?;
-
-    Ok((in_file, out_file))
+/// Open the input and output files for the test case.
+fn load_test_data_for_case(prog: &Program, case: &str) -> Result<TestData> {
+    let args = match open_optional_test_file(prog, case, "args")? {
+        Some(mut f) => {
+            let mut s = String::new();
+            f.read_to_string(&mut s)?;
+            s.split_whitespace()
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect()
+        }
+        None => vec![],
+    };
+    Ok(TestData {
+        args,
+        in_file: open_test_file(prog, case, "in")?,
+        out_file: open_test_file(prog, case, "out")?,
+    })
 }
 
 /// Compile and test the program. The program's output is compared
 /// to the expected output, and its error stream is discarded.
 pub fn test(prog: &Program, case: &str) -> Result<TestResult> {
     // Read the entire input file, to avoid slowdowns due to XZ decoding
-    let (mut in_file, mut out_file) = open_test_files_for_case(prog, case)?;
+    let TestData {
+        args,
+        mut in_file,
+        mut out_file,
+    } = load_test_data_for_case(prog, case)?;
     let mut input = vec![];
     in_file
         .read_to_end(&mut input)
@@ -95,6 +121,7 @@ pub fn test(prog: &Program, case: &str) -> Result<TestResult> {
     cmd.stdin(Stdio::piped());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
+    cmd.args(&args);
     let begin = Instant::now();
     let mut child = cmd
         .spawn()
