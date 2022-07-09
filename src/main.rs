@@ -12,9 +12,9 @@ pub use crate::config::*;
 pub use crate::repo::*;
 
 mod args;
-pub mod config;
-pub mod repo;
-pub mod run;
+mod command;
+mod config;
+mod repo;
 mod ui;
 
 fn get_program<'a>(repo: &'a Repository, program: Option<&str>) -> Result<Program<'a>> {
@@ -27,7 +27,7 @@ fn get_program<'a>(repo: &'a Repository, program: Option<&str>) -> Result<Progra
 
 fn do_build(program: &Program, debug: bool, output: Option<&str>) -> Result<()> {
     stepln!("COMPILE", "{}", program.name());
-    run::compile(program, debug).context("compilation failed")?;
+    command::compile(program, debug).context("compilation failed")?;
 
     if let Some(output) = output {
         let from = if debug {
@@ -47,7 +47,7 @@ fn do_build(program: &Program, debug: bool, output: Option<&str>) -> Result<()> 
 
 fn do_test(prog: &Program, case: &str) -> Result<bool> {
     ui::print_test_case(case);
-    let result = run::test(prog, case)
+    let result = command::test(prog, case)
         .with_context(|| format!("failed to run test case {:?} on program {}", case, prog))?;
     ui::print_test_result(&result);
     Ok(result.passed())
@@ -57,7 +57,7 @@ fn try_main(args: Arguments) -> Result<bool> {
     // init is the only command that doesn't require an existing repository
     if args.subcommand == Subcommand::Init {
         stepln!("INIT", "coman repository");
-        run::init()?;
+        command::init()?;
         return Ok(true);
     }
 
@@ -90,7 +90,7 @@ fn try_main(args: Arguments) -> Result<bool> {
             do_build(&prog, false, None)?;
 
             stepln!("RUN", "{}", prog.name());
-            let result = run::run(&prog, &args)
+            let result = command::run(&prog, &args)
                 .with_context(|| format!("failed to run program {}", prog))?;
             ui::print_run_result(&result);
             Ok(result.is_success())
@@ -103,7 +103,7 @@ fn try_main(args: Arguments) -> Result<bool> {
             let mut result = true;
             if tests.is_empty() {
                 // Testing all cases
-                let mut cases = run::get_test_cases(&program)?;
+                let mut cases = command::get_test_cases(&program)?;
                 if cases.is_empty() {
                     // No cases found
                     bail!("no test cases found in {:?}", program.test_path());
@@ -130,7 +130,7 @@ fn try_main(args: Arguments) -> Result<bool> {
             do_build(&program, true, None)?;
 
             stepln!("DEBUG", "{}", program.name());
-            let result = run::debug(&program)
+            let result = command::debug(&program)
                 .with_context(|| format!("failed to debug program {}", program))?;
             ui::print_run_result(&result);
             Ok(result.is_success())
@@ -139,11 +139,11 @@ fn try_main(args: Arguments) -> Result<bool> {
         Subcommand::Clean { program, all } => {
             if all {
                 stepln!("CLEAN", "all binaries");
-                run::clean_all(&repo).context("failed to clean all binaries")?;
+                command::clean_all(&repo).context("failed to clean all binaries")?;
             } else {
                 let program = get_program(&repo, program)?;
                 stepln!("CLEAN", "{}", program.name());
-                run::clean(&program)
+                command::clean(&program)
                     .with_context(|| format!("failed to clean binary for {}", program))?;
             }
             Ok(true)
@@ -151,7 +151,7 @@ fn try_main(args: Arguments) -> Result<bool> {
 
         Subcommand::CMake => {
             stepln!("GENERATE", "CMakeLists.txt");
-            run::write_cmake(&repo).context("failed to generate CMakeLists.txt")?;
+            command::write_cmake(&repo).context("failed to generate CMakeLists.txt")?;
             Ok(true)
         }
     }

@@ -1,4 +1,4 @@
-use crate::run::{RunResult, TestResult, TestStatus};
+use crate::command::{RunResult, TestResult, TestStatus};
 
 mod step;
 

@@ -2,7 +2,7 @@ use std::process::Command;
 
 use anyhow::{bail, Result};
 
-use crate::run::eval_command_template;
+use crate::command::eval_command_template;
 use crate::Program;
 
 use super::RunResult;

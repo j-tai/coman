@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Context, Result};
 use xz2::read::XzDecoder;
 
-use crate::run::{get_run_command, RunResult};
+use crate::command::{get_run_command, RunResult};
 use crate::Program;
 
 /// Get a list of the test cases. If the list of test cases cannot

@@ -48,8 +48,7 @@ pub fn recompile(prog: &Program, debug: bool) -> Result<()> {
     }
 }
 
-/// Check if the source file needs a recompile, e.g. due to
-/// modification.
+/// Check if the source file needs a recompile, e.g. due to modification.
 pub fn is_dirty(prog: &Program, debug: bool) -> bool {
     fn try_check_dirty(dst: &Path, src: &Path) -> io::Result<bool> {
         let dst_time = dst.metadata()?.modified()?;
@@ -65,9 +64,8 @@ pub fn is_dirty(prog: &Program, debug: bool) -> bool {
         || check_dirty(prog.build_path(debug), prog.repository().config_path())
 }
 
-/// Compile the program if it has not already been compiled. If it
-/// does not need to be compiled, no action is performed and
-/// `Ok` is returned.
+/// Compile the program if it has not already been compiled. If it does not need
+/// to be compiled, no action is performed and `Ok` is returned.
 pub fn compile(prog: &Program, debug: bool) -> Result<()> {
     if is_dirty(prog, debug) {
         recompile(prog, debug)
