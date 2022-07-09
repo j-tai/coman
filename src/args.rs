@@ -129,7 +129,7 @@ fn parse_test_args<'a, I: Iterator<Item = &'a str>>(
     opts: &mut Options<&'a str, I>,
 ) -> Result<Subcommand<'a>, UsageError<'a>> {
     Ok(Subcommand::Test {
-        program: opts.next_positional().map(|s| &s[..]),
+        program: opts.next_positional(),
         tests: opts.positionals().collect(),
     })
 }

@@ -164,7 +164,7 @@ impl Repository {
         build_debug.push(&path);
 
         Ok(Program {
-            repo: &self,
+            repo: self,
             path: path.to_path_buf(),
             src,
             test,
