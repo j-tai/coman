@@ -1,10 +1,28 @@
-use getargs::{Error, Opt, Options, Result};
+use getargs::{Opt, Options};
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum UsageError<'a> {
+    #[error("--help was specified")]
+    Help,
+    #[error("--version was specified")]
+    Version,
+    #[error("{0}")]
+    Getargs(getargs::Error<&'a str>),
+    #[error("unknown option {0}")]
+    UnknownOpt(Opt<&'a str>),
+    #[error("unknown subcommand {0:?}")]
+    UnknownSubcommand(&'a str),
+}
+
+impl<'a> From<getargs::Error<&'a str>> for UsageError<'a> {
+    fn from(e: getargs::Error<&'a str>) -> Self {
+        UsageError::Getargs(e)
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct Arguments<'a> {
-    pub bad_usage: bool,
-    pub show_help: bool,
-    pub show_version: bool,
     pub subcommand: Subcommand<'a>,
 }
 
@@ -34,25 +52,18 @@ pub enum Subcommand<'a> {
     CMake,
 }
 
-pub fn parse_args<'a>(opts: &'a Options<'a, String>) -> Result<Arguments<'a>> {
-    let mut res = Arguments {
-        bad_usage: false,
-        show_help: false,
-        show_version: false,
-        subcommand: Subcommand::Run {
-            program: None,
-            args: vec![],
-        },
-    };
-    while let Some(opt) = opts.next() {
-        match opt? {
-            Opt::Long("help") => res.show_help = true,
-            Opt::Long("version") => res.show_version = true,
-            o => return Err(Error::UnknownOpt(o)),
+pub fn parse_args<'a, I: Iterator<Item = &'a str>>(
+    opts: &mut Options<&'a str, I>,
+) -> Result<Arguments<'a>, UsageError<'a>> {
+    while let Some(opt) = opts.next_opt()? {
+        match opt {
+            Opt::Short('h') | Opt::Long("help") => return Err(UsageError::Help),
+            Opt::Long("version") => return Err(UsageError::Version),
+            _ => return Err(UsageError::UnknownOpt(opt)),
         }
     }
-    let subcommand = opts.arg_str().map(|s| &s[..]).unwrap_or("r");
-    res.subcommand = match subcommand {
+    let subcommand_name = opts.next_positional().unwrap_or("r");
+    let subcommand = match subcommand_name {
         "init" => Subcommand::Init,
         "build" | "b" => parse_build_args(opts)?,
         "clean" | "c" => parse_clean_args(opts)?,
@@ -60,58 +71,65 @@ pub fn parse_args<'a>(opts: &'a Options<'a, String>) -> Result<Arguments<'a>> {
         "run" | "r" => parse_run_args(opts)?,
         "test" | "t" => parse_test_args(opts)?,
         "cmake" => Subcommand::CMake,
-        _ => {
-            res.bad_usage = true;
-            return Ok(res);
-        }
+        _ => return Err(UsageError::UnknownSubcommand(subcommand_name)),
     };
-    Ok(res)
+    Ok(Arguments { subcommand })
 }
 
-fn parse_build_args<'a>(opts: &'a Options<'a, String>) -> Result<Subcommand<'a>> {
+fn parse_build_args<'a, I: Iterator<Item = &'a str>>(
+    opts: &mut Options<&'a str, I>,
+) -> Result<Subcommand<'a>, UsageError<'a>> {
     let mut debug = false;
     let mut output = None;
-    while let Some(opt) = opts.next() {
-        match opt? {
+    while let Some(opt) = opts.next_opt()? {
+        match opt {
             Opt::Short('d') | Opt::Long("debug") => debug = true,
-            Opt::Short('o') | Opt::Long("output") => output = Some(opts.value_str()?),
-            o => return Err(Error::UnknownOpt(o)),
+            Opt::Short('o') | Opt::Long("output") => output = Some(opts.value()?),
+            _ => return Err(UsageError::UnknownOpt(opt)),
         }
     }
     Ok(Subcommand::Build {
-        programs: opts.args().iter().map(|s| &s[..]).collect(),
+        programs: opts.positionals().collect(),
         debug,
         output,
     })
 }
 
-fn parse_clean_args<'a>(opts: &'a Options<'a, String>) -> Result<Subcommand<'a>> {
+fn parse_clean_args<'a, I: Iterator<Item = &'a str>>(
+    opts: &mut Options<&'a str, I>,
+) -> Result<Subcommand<'a>, UsageError<'a>> {
     let mut all = false;
-    while let Some(opt) = opts.next() {
-        match opt? {
+    while let Some(opt) = opts.next_opt()? {
+        match opt {
             Opt::Long("all") => all = true,
-            o => return Err(Error::UnknownOpt(o)),
+            _ => return Err(UsageError::UnknownOpt(opt)),
         }
     }
-    let program = opts.arg_str().map(|s| &s[..]);
+    let program = opts.next_positional();
     Ok(Subcommand::Clean { all, program })
 }
 
-fn parse_debug_args<'a>(opts: &'a Options<'a, String>) -> Result<Subcommand<'a>> {
+fn parse_debug_args<'a, I: Iterator<Item = &'a str>>(
+    opts: &mut Options<&'a str, I>,
+) -> Result<Subcommand<'a>, UsageError<'a>> {
     Ok(Subcommand::Debug {
-        program: opts.arg_str().map(|s| &s[..]),
+        program: opts.next_positional(),
     })
 }
 
-fn parse_run_args<'a>(opts: &'a Options<'a, String>) -> Result<Subcommand<'a>> {
-    let program = opts.arg_str().map(|s| &s[..]);
-    let args = opts.args().iter().map(|s| &s[..]).collect();
+fn parse_run_args<'a, I: Iterator<Item = &'a str>>(
+    opts: &mut Options<&'a str, I>,
+) -> Result<Subcommand<'a>, UsageError<'a>> {
+    let program = opts.next_positional();
+    let args = opts.positionals().collect();
     Ok(Subcommand::Run { program, args })
 }
 
-fn parse_test_args<'a>(opts: &'a Options<'a, String>) -> Result<Subcommand<'a>> {
+fn parse_test_args<'a, I: Iterator<Item = &'a str>>(
+    opts: &mut Options<&'a str, I>,
+) -> Result<Subcommand<'a>, UsageError<'a>> {
     Ok(Subcommand::Test {
-        program: opts.arg_str().map(|s| &s[..]),
-        tests: opts.args().iter().map(|s| &s[..]).collect(),
+        program: opts.next_positional().map(|s| &s[..]),
+        tests: opts.positionals().collect(),
     })
 }

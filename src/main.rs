@@ -4,7 +4,7 @@ use std::path::Path;
 use std::process;
 
 use anyhow::{bail, Context, Result};
-use args::Arguments;
+use args::{Arguments, UsageError};
 use getargs::Options;
 
 use crate::args::Subcommand;
@@ -159,23 +159,18 @@ fn try_main(args: Arguments) -> Result<bool> {
 
 fn main() {
     let args: Vec<_> = env::args().skip(1).collect();
-    let options = Options::new(&args);
-    let args = match args::parse_args(&options) {
+    let mut options = Options::new(args.iter().map(String::as_str));
+    let args = match args::parse_args(&mut options) {
         Ok(a) => a,
-        Err(e) => {
-            eprintln!("coman: usage error: {}", e);
-            process::exit(3);
-        }
-    };
-
-    if args.bad_usage || args.show_help {
-        print!(
-            "coman - Contest manager
+        Err(UsageError::Help) => {
+            print!(
+                "coman - Contest manager
 
 Usage: coman [OPTIONS] COMMAND
 
 Options:
-    --version  Print version and exit
+    -h, --help  Print this help message
+    --version   Print version and exit
 
 Commands:
     init
@@ -186,18 +181,19 @@ Commands:
     test|t [SOLUTION] [TEST ...]
     cmake
 "
-        );
-        if args.bad_usage {
-            process::exit(3);
-        } else {
+            );
             return;
         }
-    }
-
-    if args.show_version {
-        println!("coman v{}", env!("CARGO_PKG_VERSION"));
-        return;
-    }
+        Err(UsageError::Version) => {
+            println!("coman v{}", env!("CARGO_PKG_VERSION"));
+            return;
+        }
+        Err(e) => {
+            eprintln!("coman: usage error: {e}");
+            eprintln!("try `coman --help` for help");
+            process::exit(3);
+        }
+    };
 
     let result = try_main(args);
 
