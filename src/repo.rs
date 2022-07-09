@@ -5,6 +5,7 @@ use std::time::SystemTime;
 use std::{env, fmt};
 
 use anyhow::{bail, Context, Result};
+use if_chain::if_chain;
 use walkdir::WalkDir;
 
 use crate::Config;
@@ -179,14 +180,16 @@ impl Repository {
         let mut best_time = SystemTime::UNIX_EPOCH;
         let mut best_prog = None;
         for ent in WalkDir::new(self.source_path()).into_iter().flatten() {
-            if ent.file_type().is_file() {
-                if let Ok(meta) = ent.metadata() {
-                    if let Ok(modified) = meta.modified() {
-                        if modified > best_time {
-                            best_time = modified;
-                            best_prog = Some(ent.into_path());
-                        }
-                    }
+            if_chain! {
+                if ent.file_type().is_file();
+                if let Some(ext) = ent.path().extension().and_then(|s| s.to_str());
+                if self.config.languages.contains_key(ext);
+                if let Ok(meta) = ent.metadata();
+                if let Ok(modified) = meta.modified();
+                if modified > best_time;
+                then {
+                    best_time = modified;
+                    best_prog = Some(ent.into_path());
                 }
             }
         }

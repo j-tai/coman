@@ -27,6 +27,7 @@ dependencies = [
  "alphanumeric-sort",
  "anyhow",
  "getargs",
+ "if_chain",
  "serde",
  "thiserror",
  "toml",
@@ -39,6 +40,12 @@ name = "getargs"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "084c6b182b01dec54ff12986b9cc8859a9b0d92b074f878c382a4481a070e66e"
+
+[[package]]
+name = "if_chain"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb56e1aa765b4b4f3aadfab769793b7087bb03a4ea4920644a6d238e2df5b9ed"
 
 [[package]]
 name = "libc"
